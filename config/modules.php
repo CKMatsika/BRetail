@@ -14,7 +14,7 @@ return [
     'hr' => ['name' => 'Human resources', 'phase' => 7, 'available' => true, 'depends' => ['branches']],
     'payroll' => ['name' => 'Payroll', 'phase' => 7, 'available' => true, 'depends' => ['hr', 'accounting']],
     'loyalty' => ['name' => 'Loyalty & promotions', 'phase' => 8, 'depends' => ['sales']],
-    'reports' => ['name' => 'Reports & analytics', 'phase' => 8, 'depends' => ['accounting']],
+    'reports' => ['name' => 'Reports & analytics', 'phase' => 8, 'available' => true, 'depends' => ['accounting']],
     'mobile' => ['name' => 'Mobile & offline services', 'phase' => 8, 'depends' => ['pos']],
     'backoffice' => ['name' => 'Back office', 'phase' => 5, 'available' => true, 'depends' => ['sales', 'purchasing']],
 ];

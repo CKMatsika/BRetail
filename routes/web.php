@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CompanyLogoController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\PosController;
+use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\TradeController;
 use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
@@ -50,6 +51,10 @@ Route::middleware(['auth','tenant'])->group(base_path('routes/hr.php'));
 Route::get('/currencies', [\App\Http\Controllers\InternationalController::class,'page'])->middleware(['auth','tenant','module:currencies','module:accounting','module:inventory']);
 Route::get('/payroll', [\App\Http\Controllers\PayrollController::class, 'page'])->middleware(['auth','tenant','module:payroll']);
 Route::get('/devices', [WorkspaceController::class, 'page'])->defaults('section', 'devices')->middleware(['auth', 'tenant', 'module:access']);
+Route::middleware(['auth', 'tenant', 'module:reports'])->controller(ReportsController::class)->group(function () {
+    Route::get('/reports', 'page');
+    Route::get('/reports/export', 'export');
+});
 Route::middleware(['auth', 'tenant', 'module:access'])->group(function () {
     Route::post('/devices', [\App\Http\Controllers\DeviceController::class, 'enroll']);
     Route::post('/devices/{id}/revoke', [\App\Http\Controllers\DeviceController::class, 'revoke']);

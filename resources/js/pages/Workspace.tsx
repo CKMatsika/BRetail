@@ -7,6 +7,7 @@ import Trade, { TradeData } from "./Trade";
 import Hr, { HrData } from "./Hr";
 import Payroll, { PayrollData } from "./Payroll";
 import DeviceManager from "./DeviceManager";
+import Reports, { AnalyticsData } from "./Reports";
 import { useDialog } from "../useDialog";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import {
@@ -64,6 +65,7 @@ type Props = InventoryProps &
         trade?: TradeData;
         hr?: HrData;
         payroll?: PayrollData;
+        analytics?: AnalyticsData;
         user: { id: number; name: string };
         role: string;
         permissions: string[];
@@ -100,6 +102,7 @@ const nav = [
         icon: Activity,
         permission: "accounting.view",
     },
+    { key: "reports", label: "Reports & analytics", icon: Activity, permission: "reports.view" },
     {
         key: "pos",
         label: "Point of sale",
@@ -624,6 +627,8 @@ export default function Workspace(p: Props) {
                                       ? "Every location. One connected business."
                                       : p.section === "team"
                                         ? "The right people, with the right access."
+                                        : p.section === "reports"
+                                          ? "A clear view of sales, stock, and financial performance."
                                         : "A workspace that grows at your pace."}
                             </p>
                         </div>
@@ -1154,6 +1159,7 @@ export default function Workspace(p: Props) {
                     )}
                     {p.section === "hr" && p.hr && <Hr initial={p.hr} />}
                     {p.section === "payroll" && p.payroll && <Payroll initial={p.payroll} />}
+                    {p.section === "reports" && p.analytics && <Reports initial={p.analytics} permissions={p.permissions} />}
                     {['purchasing','sales','backoffice'].includes(p.section) && p.trade && <Trade initial={p.trade} permissions={p.permissions} />}
                     {p.section === "inventory" && (
                         <Inventory

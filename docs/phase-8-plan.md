@@ -2,6 +2,12 @@
 
 Phase 8 follows the completed Zimbabwe HR/payroll work in Phase 7. The starting scope is the project architecture item: installable PWA, controlled offline operation, integrations and mobile journeys. Loyalty is included as a later workstream and must use a tenant-scoped append-only points ledger.
 
+## Reports and analytics workstream — first release implemented
+
+The optional Reports & analytics module is now available after Accounting is enabled. It provides date, branch and book filters; sales, refunds and tax totals remain separated by transaction currency; daily transaction volume; top items by quantity; inventory value and reorder alerts; accounting income, expense, profit/loss, balance-sheet and cash-flow summaries; and a formula-safe CSV export. Report visibility follows the user's permitted branches, and cashiers without `pos.manage` only see their own POS activity. Payroll and employee details are deliberately excluded from this general reporting screen.
+
+This is the first Reports & analytics release, not completion of the entire Phase 8 roadmap. Offline synchronization, offline checkout, loyalty and integrations remain planned and guarded as described below.
+
 ## Delivery sequence
 
 1. **Installable PWA shell — implemented.** Add a web app manifest, brand icon, service worker, static app asset cache, connectivity notice and a safe offline fallback page. Do not cache authenticated HTML, API responses, employee data, prices, stock or transactions. Business workflows remain online-only.
