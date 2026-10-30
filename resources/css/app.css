@@ -213,10 +213,15 @@ small {
     padding: 0 14px;
     margin-bottom: 13px;
 }
-nav {
+.sidebar nav {
     display: flex;
     flex-direction: column;
     gap: 5px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
 }
 nav a {
     padding: 13px 13px;
