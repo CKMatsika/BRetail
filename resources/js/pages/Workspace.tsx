@@ -99,6 +99,7 @@ const nav = [
     {key: "currencies", label: "Currencies & transfers", icon: Building2, permission: "currencies.view"},
     {key: "purchasing", label: "Purchasing", icon: Boxes, permission: "purchasing.view"},
     {key: "sales", label: "Sales & credit", icon: ShoppingBag, permission: "sales.view"},
+    {key: "backoffice", label: "Back office", icon: Boxes, permission: "purchasing.view"},
     {
         key: "accounting",
         label: "Accounting & finance",
@@ -500,7 +501,8 @@ export default function Workspace(p: Props) {
                     {nav
                         .filter(
                             (n) =>
-                                can(n.permission) &&
+                                (can(n.permission) ||
+                                    (n.key === "backoffice" && can("sales.view"))) &&
                                 p.modules.some(
                                     (m) =>
                                         m.key ===
