@@ -21,6 +21,13 @@ final class Onboarding
 
         return DB::transaction(function () use ($data) {
             $tenant = Tenant::create(['name' => $data['company_name']]);
+            DB::table('tenant_subscriptions')->insert([
+                'tenant_id' => $tenant->id,
+                'plan_name' => 'Unassigned',
+                'status' => 'pending',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
             app(TenantContext::class)->id = $tenant->id;
             foreach (config('retail.roles') as $name => $permissions) {
                 Role::create(['name' => $name, 'permissions' => array_values(array_unique([...$permissions, ...config('inventory.role_permissions.'.$name, []), ...config('pos.role_permissions.'.$name, []), ...config('accounting.role_permissions.'.$name, []), ...config('trade.role_permissions.'.$name, []), ...config('international.role_permissions.'.$name, []), ...config('hr.role_permissions.'.$name, []), ...config('payroll.role_permissions.'.$name, []), ...config('reports.role_permissions.'.$name, []), ...config('loyalty.role_permissions.'.$name, [])])), 'company_wide' => in_array($name, config('retail.company_wide_roles'), true)]);

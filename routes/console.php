@@ -1,10 +1,12 @@
 <?php
 
 use App\Models\User;
+use App\Models\PlatformStaff;
 use App\Services\Onboarding;
 use App\Services\TenantContext;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 Artisan::command('inspire', function () {
@@ -39,3 +41,31 @@ Artisan::command('retail:demo {--email=owner@bretail.test}', function () {
         app(TenantContext::class)->id = null;
     }
 })->purpose('Create a local demonstration company with a generated password');
+
+Artisan::command('platform:staff {email} {--revoke}', function (string $email) {
+    $user = User::where('email', $email)->first();
+    if (! $user) {
+        $this->error('No user exists with that email address. Create and verify the account first.');
+
+        return 1;
+    }
+    if ($this->option('revoke')) {
+        PlatformStaff::where('user_id', $user->id)->delete();
+        $action = 'platform.staff_revoked';
+        $this->info('Platform access revoked for '.$email.'.');
+    } else {
+        PlatformStaff::updateOrCreate(['user_id' => $user->id], ['active' => true, 'granted_at' => now()]);
+        $action = 'platform.staff_granted';
+        $this->info('Platform access granted to '.$email.'. They can sign in to open organization management.');
+    }
+    DB::table('platform_audit_events')->insert([
+        'actor_user_id' => null,
+        'tenant_id' => $user->tenant_id,
+        'action' => $action,
+        'reason' => 'Platform staff access changed from the Artisan command.',
+        'details' => json_encode(['email' => $email, 'source' => 'artisan'], JSON_THROW_ON_ERROR),
+        'created_at' => now(),
+    ]);
+
+    return 0;
+})->purpose('Grant or revoke access to the BRetail platform administration console');

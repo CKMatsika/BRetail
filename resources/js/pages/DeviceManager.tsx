@@ -52,8 +52,8 @@ export default function DeviceManager({ devices, branches }: { devices: DeviceRo
     };
 
     return <section className="content-section device-manager">
-        <div className="section-heading"><div><span className="eyebrow">PHASE 8 · DEVICE CONTROL</span><h2>Enrolled devices</h2><p>Devices are assigned to a user and branch. Revoking one disables its sync credential.</p></div></div>
-        <div className="notice"><ShieldCheck size={17} /> No first-party sync client is available yet. Device credentials are heartbeat-only: they cannot read business data or create transactions. BRetail does not cache private data for offline use.</div>
+        <div className="section-heading"><div><h2>Enrolled devices</h2><p>Devices are assigned to a user and branch. Revoking one disables its credential immediately.</p></div></div>
+        <div className="notice"><ShieldCheck size={17} /> Device credentials can report connection status only. They cannot access business data or create transactions.</div>
         <form className="panel device-enroll-form" onSubmit={enroll}>
             <h3>Enroll a device</h3>
             <div className="form-grid">
@@ -64,7 +64,7 @@ export default function DeviceManager({ devices, branches }: { devices: DeviceRo
             <button className="primary" disabled={busy || !branches.length || !name.trim()}><Smartphone size={16} /> {busy ? "Enrolling…" : "Enroll device"}</button>
         </form>
         {notice && <p className="notice" role="status">{notice}</p>}
-        {secret && <div className="panel device-token-panel"><h3>One-time device credential</h3><p>Keep this credential secure. It is reserved for the future sync client and currently supports only the device heartbeat.</p><code>{secret}</code><button className="secondary" onClick={async () => { await navigator.clipboard.writeText(secret); setNotice("Credential copied to clipboard."); }}><Copy size={15} /> Copy credential</button></div>}
+        {secret && <div className="panel device-token-panel"><h3>One-time device credential</h3><p>Keep this credential secure. It can report device status, but it cannot access business data or make transactions.</p><code>{secret}</code><button className="secondary" onClick={async () => { await navigator.clipboard.writeText(secret); setNotice("Credential copied to clipboard."); }}><Copy size={15} /> Copy credential</button></div>}
         <div className="panel table-wrap"><table><thead><tr><th>Device</th><th>Assigned user</th><th>Branch</th><th>Last heartbeat</th><th>Access</th><th /></tr></thead><tbody>
             {devices.map(device => <tr key={device.id}><td><strong><MonitorSmartphone size={15} /> {device.name}</strong><small>{device.platform} · {device.device_uuid.slice(0, 8)}</small></td><td>{device.user}</td><td>{device.branch}</td><td>{device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : "Not connected"}</td><td>{device.revoked_at ? "Revoked" : "Active"}</td><td>{!device.revoked_at && <button className="secondary small" onClick={() => revoke(device)}><XCircle size={14} /> Revoke</button>}</td></tr>)}
             {!devices.length && <tr><td colSpan={6} className="empty-state">No devices are enrolled yet.</td></tr>}

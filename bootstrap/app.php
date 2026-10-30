@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ModuleEnabled;
+use App\Http\Middleware\RequirePlatformStaff;
 use App\Http\Middleware\SetTenant;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -16,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [HandleInertiaRequests::class]);
-        $middleware->alias(['tenant' => SetTenant::class, 'module' => ModuleEnabled::class]);
+        $middleware->alias(['tenant' => SetTenant::class, 'module' => ModuleEnabled::class, 'platform' => RequirePlatformStaff::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

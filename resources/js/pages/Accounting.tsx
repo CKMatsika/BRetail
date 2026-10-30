@@ -1011,9 +1011,8 @@ export default function Accounting({
                                 >
                                     <p>
                                         Posts stock, input tax, payable or
-                                        settlement together. Full supplier and
-                                        purchase-order management follows in
-                                        Phase 5.
+                                        settlement together. Use Purchasing for
+                                        supplier and purchase-order workflows.
                                     </p>
                                     {items.map((l, i) => (
                                         <div className="finance-line" key={i}>

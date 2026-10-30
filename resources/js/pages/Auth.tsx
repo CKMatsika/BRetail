@@ -4,9 +4,8 @@ import { ArrowRight, Check, ShoppingBag } from "lucide-react";
 type Props = {
     mode: string;
     templates?: Record<string, { label: string }>;
-    modules?: Record<string, { name: string; phase: number }>;
 };
-export default function Auth({ mode, templates = {}, modules = {} }: Props) {
+export default function Auth({ mode, templates = {} }: Props) {
     const register = mode === "register";
     const [step, setStep] = useState(0);
     const f = useForm({
@@ -31,7 +30,6 @@ export default function Auth({ mode, templates = {}, modules = {} }: Props) {
         tax_rate: "0",
         receipt_footer: "Thank you for shopping with us.",
         invoice_prefix: "INV",
-        preferred_modules: [] as string[],
     });
     const field = (key: keyof typeof f.data, label: string, type = "text") => (
         <label className="field" key={key}>
@@ -209,41 +207,6 @@ export default function Auth({ mode, templates = {}, modules = {} }: Props) {
                                 </div>
                                 {field("address", "Business address")}
                                 {field("receipt_footer", "Receipt footer")}
-                                <p className="muted">
-                                    Save preferences for future modules.
-                                    Operations arrive in later phases.
-                                </p>
-                                <div className="preferences">
-                                    {Object.entries(modules)
-                                        .filter(([, m]) => m.phase > 1)
-                                        .map(([k, m]) => (
-                                            <label key={k}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={f.data.preferred_modules.includes(
-                                                        k,
-                                                    )}
-                                                    onChange={(e) =>
-                                                        f.setData(
-                                                            "preferred_modules",
-                                                            e.target.checked
-                                                                ? [
-                                                                      ...f.data
-                                                                          .preferred_modules,
-                                                                      k,
-                                                                  ]
-                                                                : f.data.preferred_modules.filter(
-                                                                      (x) =>
-                                                                          x !==
-                                                                          k,
-                                                                  ),
-                                                        )
-                                                    }
-                                                />
-                                                {m.name}
-                                            </label>
-                                        ))}
-                                </div>
                             </>
                         )}
                         {Object.keys(f.errors).length > 0 && (

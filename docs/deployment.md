@@ -8,6 +8,10 @@
 6. Run queue workers under a supervisor for future asynchronous jobs. Phase 1 uses no business queues. Use PostgreSQL-backed sessions/cache initially; add Redis when measured load warrants it. Shared deployments need shared private file storage or an authenticated object-storage adapter.
 7. Check `/up`, then create an owner account and perform a smoke journey: sign in, create branch, create a cashier, verify cashier cannot read company settings, sign out. Review error logs without exposing sensitive data publicly.
 
+## Platform subscriptions
+
+Review [platform organization and subscription management](subscription-management.md) before deployment. Existing organizations remain active; new registrations start pending until a platform administrator activates them. After migration, grant the first named administrator with `php artisan platform:staff admin@example.com`. Configure `PLATFORM_SUPPORT_EMAIL` so organizations with inactive subscriptions know where to contact you.
+
 ## Backups and restoration
 
 Use managed PostgreSQL point-in-time recovery plus encrypted daily dumps, and versioned private file backups. Monitor backup success and define retention and recovery objectives with the owner. Example dump: `pg_dump --format=custom --file=bretail-backup.dump DATABASE_NAME` using credentials supplied through secure tooling. Never store backups under public/.

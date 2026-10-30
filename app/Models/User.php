@@ -24,6 +24,16 @@ class User extends Authenticatable
         return $this->belongsTo(Role::class);
     }
 
+    public function platformStaff()
+    {
+        return $this->hasOne(PlatformStaff::class);
+    }
+
+    public function isPlatformStaff(): bool
+    {
+        return $this->platformStaff()->where('active', true)->exists();
+    }
+
     public function branches()
     {
         return $this->belongsToMany(Branch::class)->withPivot('tenant_id');

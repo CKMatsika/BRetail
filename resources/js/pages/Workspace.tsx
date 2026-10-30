@@ -533,13 +533,6 @@ export default function Workspace(p: Props) {
                         ))}
                 </nav>
                 <div className="sidebar-bottom">
-                    <div className="foundation-label">
-                        <ShieldCheck size={17} />
-                        <div>
-                            <strong>A strong start.</strong>
-                            <small>Foundation · Phase 1</small>
-                        </div>
-                    </div>
                     <div className="profile">
                         <span className="avatar">
                             {p.user.name
@@ -584,10 +577,6 @@ export default function Workspace(p: Props) {
                         <strong>{title}</strong>
                     </div>
                     <div className="topbar-right">
-                        <span className="secure-label">
-                            <span className="status-dot" />
-                            Workspace active
-                        </span>
                         <button
                             className="icon-button"
                             aria-label="Toggle colour theme"
@@ -658,9 +647,6 @@ export default function Workspace(p: Props) {
                                 Add team member
                             </button>
                         )}
-                        <span className="phase-pill">
-                            PHASE 05 <span>Purchasing & back office</span>
-                        </span>
                     </div>
                     {p.section === "dashboard" && (
                         <>
@@ -830,23 +816,19 @@ export default function Workspace(p: Props) {
                                     <span className="mini-icon">
                                         <Boxes size={23} />
                                     </span>
-                                    <span className="eyebrow">WHAT’S NEXT</span>
+                                    <span className="eyebrow">WORKSPACE TOOLS</span>
                                     <h2>
-                                        Make stock
+                                        Manage your
                                         <br />
-                                        work smarter.
+                                        operations.
                                     </h2>
                                     <p className="muted">
-                                        Products, variants and stock movements
-                                        are now available. Enable Inventory in
-                                        Modules to get started.
+                                        Keep daily work organized across the
+                                        modules enabled for your business.
                                     </p>
-                                    <div className="planned-label">
-                                        Inventory · Available in Phase 2
-                                    </div>
                                     {can("modules.view") && (
                                         <Link href="/modules">
-                                            Explore the roadmap
+                                            Manage modules
                                             <ArrowRight size={16} />
                                         </Link>
                                     )}
@@ -1070,29 +1052,21 @@ export default function Workspace(p: Props) {
                                 </div>
                             </section>
                             <section className="panel">
-                                <h2>Build at your pace</h2>
+                                <h2>Optional modules</h2>
                                 <p className="muted">
-                                    Activate available modules or save
-                                    preferences for future phases.
+                                    Enable the tools your organization uses.
                                 </p>
                                 <div className="module-grid">
                                     {p.modules
-                                        .filter((m) => m.phase > 1)
+                                        .filter((m) => m.phase > 1 && m.available)
                                         .map((m) => (
                                             <div
                                                 className="module-card"
                                                 key={m.key}
                                             >
-                                                <span className="eyebrow">
-                                                    PHASE {m.phase}
-                                                </span>
                                                 <h3>{m.name}</h3>
                                                 <span className="muted">
-                                                    {m.available
-                                                        ? m.enabled
-                                                            ? "Enabled"
-                                                            : "Available"
-                                                        : "Planned"}
+                                                    {m.enabled ? "Enabled" : "Available"}
                                                 </span>
                                                 {m.available &&
                                                     can(
@@ -1124,35 +1098,6 @@ export default function Workspace(p: Props) {
                                                                 m.name.toLowerCase()}
                                                         </button>
                                                     )}
-                                                {can("modules.configure") && (
-                                                    <label className="checkbox">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={
-                                                                !!m.settings
-                                                                    .preferred
-                                                            }
-                                                            onChange={(e) =>
-                                                                router.patch(
-                                                                    "/modules/" +
-                                                                        m.key,
-                                                                    {
-                                                                        enabled:
-                                                                            m.enabled,
-                                                                        preferred:
-                                                                            e
-                                                                                .target
-                                                                                .checked,
-                                                                    },
-                                                                    {
-                                                                        preserveScroll: true,
-                                                                    },
-                                                                )
-                                                            }
-                                                        />
-                                                        Include in my roadmap
-                                                    </label>
-                                                )}
                                             </div>
                                         ))}
                                 </div>

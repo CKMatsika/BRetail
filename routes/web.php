@@ -11,7 +11,7 @@ use App\Http\Controllers\TradeController;
 use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', fn () => redirect(auth()->check() ? '/dashboard' : '/login'));
+Route::get('/', fn () => redirect(auth()->check() ? (auth()->user()->isPlatformStaff() ? '/platform/organizations' : '/dashboard') : '/login'));
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'loginPage'])->name('login');
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
@@ -19,6 +19,11 @@ Route::middleware('guest')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:registration');
 });
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth');
+Route::get('/subscription', [\App\Http\Controllers\SubscriptionStatusController::class, 'show'])->middleware('auth');
+Route::middleware(['auth', 'platform'])->prefix('platform')->group(function () {
+    Route::get('/organizations', [\App\Http\Controllers\PlatformOrganizationController::class, 'index']);
+    Route::patch('/organizations/{tenantId}/subscription', [\App\Http\Controllers\PlatformOrganizationController::class, 'updateSubscription']);
+});
 Route::middleware(['auth', 'tenant'])->group(base_path('routes/inventory.php'));
 Route::middleware(['auth', 'tenant'])->group(base_path('routes/pos.php'));
 Route::middleware(['auth', 'tenant'])->group(base_path('routes/accounting.php'));

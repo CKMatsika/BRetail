@@ -4,6 +4,8 @@ import { createInertiaApp } from "@inertiajs/react";
 import Auth from "./pages/Auth";
 import Workspace from "./pages/Workspace";
 import International from "./pages/International";
+import PlatformAdmin from "./pages/PlatformAdmin";
+import SubscriptionStatus from "./pages/SubscriptionStatus";
 import "../css/app.css";
 
 function OfflineNotice() {
@@ -29,7 +31,7 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator && window.i
 }
 
 createInertiaApp({
-    resolve: (name) => ({ Auth, Workspace, International })[name] as React.ComponentType<any>,
+    resolve: (name) => ({ Auth, Workspace, International, PlatformAdmin, SubscriptionStatus })[name] as React.ComponentType<any>,
     setup({ el, App, props }) {
         createRoot(el!).render(<><App {...props} /><OfflineNotice /></>);
     },

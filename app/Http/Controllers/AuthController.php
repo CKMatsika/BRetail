@@ -20,7 +20,7 @@ class AuthController
 
     public function registerPage()
     {
-        return Inertia::render('Auth', ['mode' => 'register', 'templates' => config('retail.templates'), 'modules' => config('modules')]);
+        return Inertia::render('Auth', ['mode' => 'register', 'templates' => config('retail.templates')]);
     }
 
     public function login(Request $r)
@@ -31,7 +31,7 @@ class AuthController
         }
         $r->session()->regenerate();
 
-        return redirect('/dashboard');
+        return redirect($r->user()->isPlatformStaff() ? '/platform/organizations' : '/dashboard');
     }
 
     public function register(Request $r, Onboarding $service)
