@@ -1,0 +1,43 @@
+name: Foundation and inventory checks
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: bretail_test
+          POSTGRES_USER: bretail
+          POSTGRES_PASSWORD: testing-only
+        ports: ['55432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, pdo_sqlite, mbstring, gd, intl, zip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: composer install --prefer-dist --no-interaction
+      - run: cp .env.example .env && php artisan key:generate
+      - run: php vendor/phpunit/phpunit/phpunit -c phpunit.pgsql.xml
+        env:
+          DB_PASSWORD: testing-only
+      - run: npm ci
+      - run: npm run typecheck && npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Start isolated browser test app
+        env:
+          POS_TRAINING_ENABLED: 'true'
+          DB_PORT: '55432'
+          DB_DATABASE: bretail_test
+          DB_USERNAME: bretail
+          DB_PASSWORD: testing-only
+        run: |
+          php artisan migrate --force
+          php -S 127.0.0.1:8000 -t public > storage/logs/browser-server.log 2>&1 &
+      - run: npx playwright test

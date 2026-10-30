@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php" colors="true"><testsuites><testsuite name="PostgreSQL foundation"><directory>tests/Feature</directory></testsuite></testsuites><php>
+<env name="APP_ENV" value="testing"/><env name="POS_TRAINING_ENABLED" value="true"/><env name="BCRYPT_ROUNDS" value="4"/><env name="CACHE_STORE" value="array"/><env name="DB_CONNECTION" value="pgsql" force="true"/><env name="DB_HOST" value="127.0.0.1"/><env name="DB_PORT" value="55432"/><env name="DB_DATABASE" value="bretail_test" force="true"/><env name="DB_USERNAME" value="bretail"/><env name="DB_PASSWORD" value=""/><env name="SESSION_DRIVER" value="array"/><env name="QUEUE_CONNECTION" value="sync"/><env name="MAIL_MAILER" value="array"/>
+</php></phpunit>
+

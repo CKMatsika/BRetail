@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "BRetail Retail Operations",
+  "short_name": "BRetail",
+  "description": "Retail operations workspace for BRetail teams.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#f6f8f7",
+  "theme_color": "#145e4b",
+  "icons": [
+    { "src": "/icons/bretail.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

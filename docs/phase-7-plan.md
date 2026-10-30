@@ -1,0 +1,34 @@
+# Phase 7 — Workforce and payroll plan
+
+Phase 7 follows completion of the currency, multi-branch and transfer work in Phase 6. The module registry identifies Human resources and Payroll as Phase 7; Mobile/offline remains Phase 8.
+
+## Human resources
+
+- **Progress:** HR is available as an opt-in module. It now delivers a branch-scoped employee directory, employee numbers, contact/job details, same-branch manager links with cycle checks, active/on-leave/terminated statuses, effective-dated snapshots, offboarding records, audit entries and read-only history. Leave types, annual entitlements, balances, requests, approval decisions and a month calendar are implemented.
+- Employee directory with employee number, legal/preferred names, contact details, employment status, start/end dates, job title and home branch.
+- Employment and compensation changes use effective dates and an immutable history; payroll-sensitive fields are visible only to authorized HR/payroll roles.
+- Manager relationships, branch assignment and organizational reporting respect tenant and branch access.
+- Leave types, balances, requests, approvals and a branch calendar, with configurable accrual policies rather than assumed statutory rules.
+- Audited create/update/status actions and safe offboarding that preserves payroll and audit records.
+
+## Payroll
+
+- **Initial jurisdiction:** Zimbabwe, per the owner decision on 30 October 2026. PAYE rule versions must model currency-specific tables (USD and ZWG for 2026), the 3% AIDS levy and the current NSSA POBS contribution/ceiling. Effective dates and cited source documents are required; do not hard-code a timeless rate. ZIMRA's 2026 tables publish both currency tables and the levy. ZIMRA's PAYE guidance says mixed USD/ZWG remuneration uses the USD table and the tax is apportioned. NSSA's official contribution page currently states 4.5% employee + 4.5% employer against a USD 700 ceiling, while noting that the ceiling is gazetted quarterly. Reconfirm the applicable currency/table and ceiling per pay date before calculation. Sources: [ZIMRA 2026 ZWG PAYE table](https://www.zimra.co.zw/domestic-taxes/tax-tables?download=4522%3Azwg-paye-tax-tables-2026), [ZIMRA 2026 USD PAYE table](https://www.zimra.co.zw/?download=4523%3Ausd-paye-tax-tables-2026), [ZIMRA PAYE guidance](https://zimra.co.zw/domestic-taxes/individual/pay-as-you-earn-paye), [NSSA contributions](https://www.nssa.org.zw/Contributions/).
+- **Progress:** Payroll is an opt-in module. It supports source-linked Zimbabwe rule drafts and independent approval; confidential effective-dated salary terms; monthly PAYE/AIDS/NSSA draft calculations with recurring and one-off earnings, benefits, deductions and credits; FDS averaging across approved year-to-date history; Non-FDS monthly calculations without credits; prior-period method snapshots; negative PAYE/levy refund posting; maker/checker approval; accounting journal posting and reasoned reversal; audited CSV registers, YTD totals and a monthly TaRMS reconciliation workpaper; browser-printable and explicitly emailed payslips; controlled net-wage settlement; and sourced calendar-day earnings proration across employment windows and effective-dated salary-term changes. Mixed USD + ZWG runs support currency-tagged adjustments, partial employment and mid-month term changes, pay-date FX, owner-approved proportional tax allocation by converted taxable income, and the same FDS/Non-FDS methods. They post to company-base-currency ledgers using the saved rate and settle against base/foreign bank accounts. Covered employees use the verified USD NSSA ceiling on combined converted cash wages, with native-currency deductions and net pay on payslips. HR captures the sensitive identity, tax and NSSA data needed for reconciliation; the monthly return and NSSA workpapers support manual filing, not electronic submission. Neither rule template pre-fills NSSA parameters.
+- Configurable pay frequencies and periods, employee salary/wage terms, recurring and one-off earnings/deductions, and authorized payroll runs.
+- Effective-dated, jurisdiction-specific statutory rules. Do not ship assumed tax, pension, social security or minimum-wage values; import/configure rules with source and approval history.
+- Draft calculation, review, approval, immutable posting, reversal/correction and payslip generation. Salary details are confidential and not exposed to managers without payroll permission.
+- Balanced accounting postings to payroll expense, withholding liabilities and net-payable control accounts, with manual settlement through approved cash/bank workflows. Training/live separation, period locks, idempotency and branch reporting apply.
+- Exportable payroll registers and year-to-date employee totals, with access checks and audit records.
+
+## Acceptance
+
+- Tenant and branch isolation; HR, payroll, manager and auditor permission boundaries.
+- Employee changes preserve effective-dated history; offboarding never deletes payroll history.
+- Leave balance arithmetic, request/approval retries and competing approvals.
+- Pay-period boundaries, proration, configured deductions, rounding, negative-net prevention, approval separation, posting balance, reversal and duplicate-request tests.
+- Desktop/mobile HR flows, payroll run and print/export journeys, complete regression and operating/API guides.
+
+## Operating boundary and remaining compliance scope
+
+Zimbabwe is the initial jurisdiction, and rates are entered through the payroll admin UI with source URLs and independent approval. The included 2026 PAYE drafts are source templates, not approved tenant rule sets. Monthly calculations require approved rule sets and explicitly entered salary benefits, deductions, credits and NSSA coverage confirmation. NSSA eligibility checks apply the published age, citizenship/residency and listed exemption rules; casual-worker days and recurring-contract exceptions still require an authorized monthly review because BRetail does not capture actual days or contract recurrence. ZIMRA Notice 12 of 2024 states the new monthly PAYE return replaced Form P2 from January 2024 and annual ITF16 is no longer relevant from tax year 2024; Notice 05 of 2025 describes employee registration and earnings capture in TaRMS. BRetail exports a monthly reconciliation workpaper for manual portal entry and stores available TaRMS identity/tax-credit details under restricted HR access, but it does not submit returns or generate TaRMS's live upload template. Direct TaRMS integration remains outside this implementation. Confirm current rates, ceilings, eligibility, FDS classification and portal figures with the payroll administrator before filing. FDS calculations require every prior month to have a valid approved payroll snapshot; reconcile legacy payroll history before the first FDS run after deploying this calculation.
