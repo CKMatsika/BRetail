@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\PosCustomer;
 use App\Models\PosHold;
+use App\Models\TenantModule;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -57,11 +58,17 @@ final class PosHolds
     public function customer(User $user, array $input): PosCustomer
     {
         InventoryAccess::permit($user, 'pos.customer');
-        $d = Validator::make($input, ['name' => 'required|string|max:160', 'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:40'])->validate();
+        $d = Validator::make($input, ['name' => 'required|string|max:160', 'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:40', 'loyalty_opt_in' => 'sometimes|boolean'])->validate();
 
         return DB::transaction(function () use ($d, $user) {
             app(PosAccess::class)->lock($user, 'pos.customer');
+            $optIn = (bool) ($d['loyalty_opt_in'] ?? false);
+            unset($d['loyalty_opt_in']);
+            if ($optIn && ! TenantModule::where('key', 'loyalty')->where('enabled', true)->exists()) {
+                throw ValidationException::withMessages(['loyalty_opt_in' => 'Loyalty is not enabled for this workspace.']);
+            }
             $c = PosCustomer::create($d);
+            if ($optIn) app(LoyaltyService::class)->enroll($c, $user);
             Audit::record('pos.customer_created', (string) $c->id);
 
             return $c;

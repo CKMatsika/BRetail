@@ -63,7 +63,8 @@ final class AccountingBridge
         }$l = app(AccountingLedger::class);
         $lines = [];
         foreach ($sale->payments()->get() as $p) {
-            $lines[] = $l->line($p->method === 'bank_transfer' ? 'bank' : $p->method, $p->amount);
+            $role = match ($p->method) { 'bank_transfer' => 'bank', 'loyalty_points' => 'loyalty_liability', default => $p->method };
+            $lines[] = $l->line($role, $p->amount);
         }$lines[] = $l->line('sales', '0', PosMath::sum($sale->items()->get()->pluck('net'), 4));
         $lines[] = $l->line('tax_payable', '0', $sale->tax);
         $cost = PosMath::sum($sale->items()->get()->pluck('cost_value'), 4);
@@ -79,7 +80,8 @@ final class AccountingBridge
         }$l = app(AccountingLedger::class);
         $lines = [$l->line('returns', $return->net), $l->line('tax_payable', $return->tax)];
         foreach ($return->payments()->get() as $p) {
-            $lines[] = $l->line($p->method === 'bank_transfer' ? 'bank' : $p->method, '0', $p->amount);
+            $role = match ($p->method) { 'bank_transfer' => 'bank', 'loyalty_points' => 'loyalty_liability', default => $p->method };
+            $lines[] = $l->line($role, '0', $p->amount);
         }$cost = PosMath::sum($return->items()->get()->pluck('cost_value'), 4);
         $lines[] = $l->line('inventory', $cost);
         $lines[] = $l->line('cogs', '0', $cost);

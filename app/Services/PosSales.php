@@ -76,8 +76,10 @@ final class PosSales
             foreach ($payments as $p) {
                 PosPayment::create(['sale_id' => $sale->id, 'method' => $p['method'], 'amount' => PosMath::money(BigDecimal::of($p['amount'])->minus($p['method'] === 'cash' ? $change : '0')), 'tendered' => $p['amount'], 'change' => $p['method'] === 'cash' ? PosMath::money($change) : '0.00', 'reference' => $p['reference']]);
             }
+            app(LoyaltyService::class)->redeemForSale($user, $sale);
             abort_unless($session->mode === $mode && app(PosAccountingGate::class)->mode() === $mode, 422, 'Shift operating mode changed.');
             app(AccountingBridge::class)->sale($user, $sale);
+            app(LoyaltyService::class)->earnForSale($user, $sale);
             Audit::record('pos.sale_completed', (string) $sale->id, ['receipt' => $number, 'total' => $sale->total, 'mode' => $mode]);
 
             return $sale->load('items', 'payments');

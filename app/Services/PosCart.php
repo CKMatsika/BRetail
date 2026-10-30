@@ -72,7 +72,7 @@ final class PosCart
         foreach ($d['payments'] as $p) {
             if (! BigDecimal::of($p['amount'])->isPositive()) {
                 throw ValidationException::withMessages(['payments' => 'Every tender must be positive.']);
-            }if ($p['method'] !== 'cash' && empty($p['reference'])) {
+            }if (! in_array($p['method'], ['cash', 'loyalty_points'], true) && empty($p['reference'])) {
                 throw ValidationException::withMessages(['payments' => 'Noncash payments require an external reference.']);
             }$rows[] = ['method' => $p['method'], 'amount' => PosMath::money($p['amount']), 'reference' => $p['reference'] ?? null];
         }usort($rows, fn ($a, $b) => strcmp($a['method'], $b['method']));

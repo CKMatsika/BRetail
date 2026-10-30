@@ -16,5 +16,6 @@ return [
         ['5000', 'Cost of goods sold', 'expense', false, 'cogs'], ['5100', 'Inventory losses', 'expense', false, 'inventory_loss'], ['5200', 'Operating expenses', 'expense', false, 'expense'], ['5300', 'Bank charges', 'expense', false, 'bank_fees'], ['5400', 'Cash shortages', 'expense', false, 'cash_short'], ['5500', 'Rounding differences', 'expense', false, 'rounding'],
         ['5600', 'Payroll expense', 'expense', false, 'payroll_expense'], ['5610', 'Employer social security expense', 'expense', false, 'payroll_nssa_expense'],
         ['2200', 'Net wages payable', 'liability', false, 'payroll_net_payable'], ['2210', 'PAYE and AIDS levy payable', 'liability', false, 'payroll_paye_payable'], ['2220', 'NSSA payable', 'liability', false, 'payroll_nssa_payable'], ['2230', 'Other payroll deductions payable', 'liability', false, 'payroll_other_deductions'],
+        ['LOY-LIAB', 'Loyalty points liability', 'liability', false, 'loyalty_liability'], ['LOY-EXP', 'Loyalty rewards expense', 'expense', false, 'loyalty_expense'],
     ],
 ];

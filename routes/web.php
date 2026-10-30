@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CompanyLogoController;
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\LoyaltyController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\TradeController;
@@ -26,6 +27,14 @@ foreach (['purchasing', 'sales', 'backoffice'] as $section) {
     Route::get('/'.$section, [TradeController::class, 'page'])->defaults('section', $section)->middleware(['auth', 'tenant', 'module:'.$section, 'module:accounting', 'module:inventory']);
 }
 Route::get('/accounting', [AccountingController::class, 'page'])->middleware(['auth', 'tenant', 'module:accounting']);
+Route::middleware(['auth', 'tenant', 'module:loyalty'])->controller(LoyaltyController::class)->group(function () {
+    Route::get('/loyalty', 'page');
+    Route::patch('/loyalty/program', 'program');
+    Route::post('/loyalty/promotions', 'promotion');
+    Route::patch('/loyalty/promotions/{id}', 'promotion');
+    Route::post('/loyalty/customers/{id}/enroll', 'enroll');
+    Route::post('/loyalty/customers/{id}/withdraw', 'withdraw');
+});
 Route::middleware(['auth', 'tenant', 'module:pos', 'module:inventory'])->controller(PosController::class)->group(function () {
     Route::get('/pos', 'page');
     Route::get('/pos/sales/{id}/receipt', 'receipt');

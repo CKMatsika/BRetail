@@ -110,6 +110,7 @@ final class PosReturns
             }
             abort_unless($session->mode === $mode && $sale->mode === $mode && app(PosAccountingGate::class)->mode() === $mode, 422, 'Sale and shift operating modes differ.');
             app(AccountingBridge::class)->refund($user, $return);
+            app(LoyaltyService::class)->reverseForReturn($user, $sale, $return);
             Audit::record('pos.return_completed', (string) $return->id, ['sale_id' => $sale->id, 'total' => $return->total, 'mode' => $mode]);
 
             return $return->load('items', 'payments');

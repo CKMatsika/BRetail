@@ -8,6 +8,7 @@ import Hr, { HrData } from "./Hr";
 import Payroll, { PayrollData } from "./Payroll";
 import DeviceManager from "./DeviceManager";
 import Reports, { AnalyticsData } from "./Reports";
+import Loyalty, { LoyaltyData } from "./Loyalty";
 import { useDialog } from "../useDialog";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import {
@@ -31,6 +32,7 @@ import {
     Activity,
     ArrowRight,
     Smartphone,
+    Award,
 } from "lucide-react";
 type Branch = {
     id: number;
@@ -66,6 +68,7 @@ type Props = InventoryProps &
         hr?: HrData;
         payroll?: PayrollData;
         analytics?: AnalyticsData;
+        loyalty?: LoyaltyData;
         user: { id: number; name: string };
         role: string;
         permissions: string[];
@@ -103,6 +106,7 @@ const nav = [
         permission: "accounting.view",
     },
     { key: "reports", label: "Reports & analytics", icon: Activity, permission: "reports.view" },
+    { key: "loyalty", label: "Loyalty & promotions", icon: Award, permission: "loyalty.view" },
     {
         key: "pos",
         label: "Point of sale",
@@ -629,6 +633,8 @@ export default function Workspace(p: Props) {
                                         ? "The right people, with the right access."
                                         : p.section === "reports"
                                           ? "A clear view of sales, stock, and financial performance."
+                                          : p.section === "loyalty"
+                                            ? "Reward customer visits with clear rules, consent, and a complete points history."
                                         : "A workspace that grows at your pace."}
                             </p>
                         </div>
@@ -1160,6 +1166,7 @@ export default function Workspace(p: Props) {
                     {p.section === "hr" && p.hr && <Hr initial={p.hr} />}
                     {p.section === "payroll" && p.payroll && <Payroll initial={p.payroll} />}
                     {p.section === "reports" && p.analytics && <Reports initial={p.analytics} permissions={p.permissions} />}
+                    {p.section === "loyalty" && p.loyalty && <Loyalty initial={p.loyalty} />}
                     {['purchasing','sales','backoffice'].includes(p.section) && p.trade && <Trade initial={p.trade} permissions={p.permissions} />}
                     {p.section === "inventory" && (
                         <Inventory

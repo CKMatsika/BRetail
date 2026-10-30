@@ -16,4 +16,5 @@ Route::prefix('pos')->middleware(['module:pos', 'module:inventory'])->controller
     Route::post('/holds', 'hold');
     Route::post('/holds/{id}/cancel', 'cancelHold');
     Route::post('/customers', 'customer');
+    Route::get('/customers/{id}/loyalty', 'customerLoyalty');
 });

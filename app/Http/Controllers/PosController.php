@@ -43,6 +43,8 @@ class PosController
         $sessions = $sessionQuery->where(fn ($q) => $q->whereIn('id', $recent)->orWhere('status', 'open'))->latest('id')->get();
         $names = User::where('tenant_id', $u->tenant_id)->whereIn('id', $sessions->pluck('user_id')->merge($sessions->pluck('closed_by'))->filter())->pluck('name', 'id');
         $own = PosSession::where('user_id', $u->id)->where('status', 'open')->first();
+        $loyaltyAvailable = TenantModule::where('key', 'loyalty')->where('enabled', true)->exists()
+            && app(\App\Services\LoyaltyService::class)->program()->active;
 
         return ['pos' => [
             'training_available' => app(PosAccountingGate::class)->training(),
@@ -53,7 +55,8 @@ class PosController
             'warehouses' => $warehouses, 'departments' => Classification::where('level', 'department')->orderBy('name')->get(['id', 'name']),
             'variants' => ProductVariant::with('product')->where('active', true)->whereHas('product', fn ($q) => $q->where('active', true))->orderBy('name')->get()->map(fn ($v) => [...$v->only('id', 'name', 'sku', 'barcode', 'selling_price', 'attributes'), 'product_name' => $v->product->name, 'department_id' => $v->product->department_id, 'brand' => $v->product->brand]),
             'stock' => StockBalance::whereIn('warehouse_id', $ids)->get(['warehouse_id', 'variant_id', 'quantity']),
-            'customers' => PosCustomer::orderBy('name')->get(['id', 'name', 'email', 'phone']),
+            'loyalty_available' => $loyaltyAvailable,
+            'customers' => PosCustomer::orderBy('name')->get(['id', 'name', 'email', 'phone', 'loyalty_number', 'loyalty_consent_at', 'loyalty_opted_out_at'])->map(fn ($customer) => [...$customer->only('id', 'name', 'email', 'phone', 'loyalty_number'), 'loyalty_enrolled' => $loyaltyAvailable && $customer->loyalty_consent_at !== null && $customer->loyalty_opted_out_at === null]),
             'holds' => PosHold::whereIn('warehouse_id', $ids)->when(! $u->canDo('pos.manage'), fn ($q) => $q->where('user_id', $u->id))->where('status', 'held')->latest('id')->get(),
             'sessions' => $sessions->map(fn ($s) => [...$s->toArray(), 'cashier_name' => $names[$s->user_id] ?? 'Cashier', 'closed_by_name' => $names[$s->closed_by] ?? null, 'summary' => app(PosShifts::class)->summary($s)]),
             'own_session' => $own && $ids->contains($own->warehouse_id) ? [...$own->toArray(), 'summary' => app(PosShifts::class)->summary($own)] : null,
@@ -125,6 +128,20 @@ class PosController
     public function customer(Request $r, PosHolds $s)
     {
         return $this->saved($r, $s->customer($r->user(), $r->all()), 'Customer created.', 201);
+    }
+
+    public function customerLoyalty(Request $request, string $id)
+    {
+        InventoryAccess::permit($request->user(), 'pos.sell');
+        abort_unless(TenantModule::where('key', 'loyalty')->where('enabled', true)->exists(), 404);
+        $customer = PosCustomer::findOrFail($id);
+        $service = app(\App\Services\LoyaltyService::class);
+        $program = $service->program();
+        $enrolled = $service->enrolled($customer) && $program->active;
+        $points = $enrolled ? $service->balance($customer) : '0.000';
+        $value = \Brick\Math\BigDecimal::of($points)->multipliedBy($program->value_per_point)->toScale(2, \Brick\Math\RoundingMode::HalfUp);
+
+        return response()->json(['data' => ['enrolled' => $enrolled, 'points' => $points, 'value' => (string) $value, 'currency' => Company::firstOrFail()->base_currency]]);
     }
 
     public function returnQuote(Request $r, PosReturns $s, string $id)

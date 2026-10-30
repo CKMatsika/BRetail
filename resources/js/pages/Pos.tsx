@@ -154,7 +154,10 @@ export type PosProps = {
             name: string;
             email: string | null;
             phone: string | null;
+            loyalty_number: string | null;
+            loyalty_enrolled: boolean;
         }[];
+        loyalty_available: boolean;
         holds: Hold[];
         sessions: Session[];
         own_session: Session | null;
@@ -166,6 +169,7 @@ const methods = [
     { value: "card", label: "Card" },
     { value: "mobile_money", label: "Mobile money" },
     { value: "bank_transfer", label: "Bank transfer" },
+    { value: "loyalty_points", label: "Loyalty points" },
 ];
 function scaled(value: string, places = 2): bigint {
     if (!/^\d+(\.\d+)?$/.test(value)) return 0n;
@@ -237,11 +241,14 @@ function Tenders({
     rows,
     setRows,
     disabled = false,
+    includeLoyalty = false,
 }: {
     rows: Payment[];
     setRows: (p: Payment[]) => void;
     disabled?: boolean;
+    includeLoyalty?: boolean;
 }) {
+    const availableMethods = includeLoyalty ? methods : methods.filter((m) => m.value !== "loyalty_points");
     return (
         <div className="pos-tenders">
             {rows.map((p, i) => (
@@ -265,7 +272,7 @@ function Tenders({
                                     )
                                 }
                             >
-                                {methods.map((m) => (
+                                {availableMethods.map((m) => (
                                     <option key={m.value} value={m.value}>
                                         {m.label}
                                     </option>
@@ -293,7 +300,7 @@ function Tenders({
                             />
                         </label>
                     </div>
-                    {p.method !== "cash" && (
+                    {p.method !== "cash" && p.method !== "loyalty_points" && (
                         <label className="field">
                             External payment reference
                             <input
@@ -334,7 +341,7 @@ function Tenders({
                     className="secondary"
                     disabled={disabled}
                     onClick={() => {
-                        const next = methods.find(
+                        const next = availableMethods.find(
                             (m) => !rows.some((p) => p.method === m.value),
                         );
                         if (next)
@@ -353,6 +360,7 @@ function Tenders({
             )}
             <p className="muted">
                 Noncash payments are recorded manually. No gateway is contacted.
+                {includeLoyalty && " Loyalty tender is the value of whole points; balance and limits are checked at checkout."}
             </p>
         </div>
     );
@@ -478,13 +486,16 @@ function ShiftClose({
 function CustomerForm({
     close,
     created,
+    loyaltyAvailable,
 }: {
     close: () => void;
     created: (id: number) => void;
+    loyaltyAvailable: boolean;
 }) {
     const [name, setName] = useState(""),
         [email, setEmail] = useState(""),
         [phone, setPhone] = useState(""),
+        [loyaltyOptIn, setLoyaltyOptIn] = useState(false),
         [error, setError] = useState(""),
         [busy, setBusy] = useState(false);
     return (
@@ -498,6 +509,7 @@ function CustomerForm({
                             name,
                             email: email || null,
                             phone: phone || null,
+                            loyalty_opt_in: loyaltyOptIn,
                         });
                         router.reload({
                             onSuccess: () => {
@@ -527,6 +539,12 @@ function CustomerForm({
                         />
                     </label>
                 ))}
+                {loyaltyAvailable && (
+                    <label className="field">
+                        <span><input type="checkbox" checked={loyaltyOptIn} onChange={(e) => setLoyaltyOptIn(e.target.checked)} /> Enroll in Loyalty & Promotions</span>
+                        <small>Customer consent is optional. Their phone or email may be used to identify the rewards account.</small>
+                    </label>
+                )}
                 <Errors error={error} />
                 <button className="primary" disabled={busy}>
                     Save customer
@@ -675,6 +693,7 @@ function ReturnForm({
                         rows={payments}
                         setRows={setPayments}
                         disabled={!!pending}
+                        includeLoyalty={sale.payments.some((payment) => payment.method === "loyalty_points")}
                     />
                 )}
                 <CurrencyRefundFields sale={sale} session={session} amounts={fxRefunds} setAmounts={setFxRefunds} targets={fxTargets} setTargets={setFxTargets}/>
@@ -715,6 +734,7 @@ export default function Pos({
     );
     const [customer, setCustomer] = useState<number | null>(null),
         [customerQuery, setCustomerQuery] = useState("");
+    const [loyaltyBalance, setLoyaltyBalance] = useState<{ points: string; value: string; currency: string } | null>(null);
     const [cart, setCart] = useState<CartLine[]>([]),
         [quote, setQuote] = useState<Quote | null>(null),
         [quoting, setQuoting] = useState(false),
@@ -737,6 +757,20 @@ export default function Pos({
     const [limit, setLimit] = useState(48);
     const input = useRef<HTMLInputElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
+    useEffect(() => {
+        let current = true;
+        const selected = p.customers.find((c) => c.id === customer);
+        if (!customer || !p.loyalty_available || !selected?.loyalty_enrolled) {
+            setLoyaltyBalance(null);
+            return () => { current = false; };
+        }
+        axios.get(`/pos/customers/${customer}/loyalty`).then((response) => {
+            if (current) setLoyaltyBalance(response.data.data);
+        }).catch(() => {
+            if (current) setLoyaltyBalance(null);
+        });
+        return () => { current = false; };
+    }, [customer, p.loyalty_available, p.customers]);
     const cameraStream = useRef<MediaStream | null>(null);
     const [cameraOpen, setCameraOpen] = useState(false);
     const [cameraMessage, setCameraMessage] = useState("");
@@ -1233,11 +1267,16 @@ export default function Pos({
                                     disabled={!!pending}
                                     value={customer ?? ""}
                                     onChange={(e) =>
-                                        setCustomer(
-                                            e.target.value
-                                                ? Number(e.target.value)
-                                                : null,
-                                        )
+                                        (() => {
+                                            const next = e.target.value ? Number(e.target.value) : null;
+                                            setCustomer(next);
+                                            if (!p.customers.find((c) => c.id === next)?.loyalty_enrolled) {
+                                                setPayments((rows) => {
+                                                    const otherRows = rows.filter((row) => row.method !== "loyalty_points");
+                                                    return otherRows.length ? otherRows : rows.map((row) => row.method === "loyalty_points" ? { ...row, method: "cash", reference: "" } : row);
+                                                });
+                                            }
+                                        })()
                                     }
                                 >
                                     <option value="">Walk-in customer</option>
@@ -1245,6 +1284,7 @@ export default function Pos({
                                         <option key={c.id} value={c.id}>
                                             {c.name}
                                             {c.phone ? " · " + c.phone : ""}
+                                            {c.loyalty_enrolled ? " · rewards member" : ""}
                                         </option>
                                     ))}
                                 </select>
@@ -1845,6 +1885,7 @@ export default function Pos({
                                     <th>Name</th>
                                     <th>Phone</th>
                                     <th>Email</th>
+                                    {p.loyalty_available && <th>Rewards</th>}
                                 </tr>
                             </thead>
                             <tbody>
@@ -1861,6 +1902,7 @@ export default function Pos({
                                             <td>{c.name}</td>
                                             <td>{c.phone ?? "—"}</td>
                                             <td>{c.email ?? "—"}</td>
+                                            {p.loyalty_available && <td>{c.loyalty_enrolled ? c.loyalty_number : "Not enrolled"}</td>}
                                         </tr>
                                     ))}
                             </tbody>
@@ -1888,6 +1930,7 @@ export default function Pos({
                 <CustomerForm
                     close={() => setModal(null)}
                     created={setCustomer}
+                    loyaltyAvailable={p.loyalty_available}
                 />
             )}{" "}
             {modal === "hold" && (
@@ -1943,10 +1986,12 @@ export default function Pos({
                             {quote.currency} {quote.total}
                         </strong>
                     </div>
+                    {loyaltyBalance && <p className="notice">Rewards balance: <strong>{loyaltyBalance.points} points</strong> · value {loyaltyBalance.currency} {loyaltyBalance.value}</p>}
                     <Tenders
                         rows={payments}
                         setRows={setPayments}
                         disabled={!!pending}
+                        includeLoyalty={p.loyalty_available && !!p.customers.find((c) => c.id === customer)?.loyalty_enrolled}
                     />
                     <CurrencyTenderFields drawers={currencyDrawers} amounts={fxTenders} setAmounts={setFxTenders} changeDrawer={fxChange} setChangeDrawer={setFxChange} disabled={!!pending}/>
                     <div className="pos-payment-summary">

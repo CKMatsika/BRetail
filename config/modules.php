@@ -13,7 +13,7 @@ return [
     'currencies' => ['name' => 'Multi-currency', 'phase' => 6, 'available' => true, 'depends' => ['accounting','inventory']],
     'hr' => ['name' => 'Human resources', 'phase' => 7, 'available' => true, 'depends' => ['branches']],
     'payroll' => ['name' => 'Payroll', 'phase' => 7, 'available' => true, 'depends' => ['hr', 'accounting']],
-    'loyalty' => ['name' => 'Loyalty & promotions', 'phase' => 8, 'depends' => ['sales']],
+    'loyalty' => ['name' => 'Loyalty & promotions', 'phase' => 8, 'available' => true, 'depends' => ['sales', 'pos']],
     'reports' => ['name' => 'Reports & analytics', 'phase' => 8, 'available' => true, 'depends' => ['accounting']],
     'mobile' => ['name' => 'Mobile & offline services', 'phase' => 8, 'depends' => ['pos']],
     'backoffice' => ['name' => 'Back office', 'phase' => 5, 'available' => true, 'depends' => ['sales', 'purchasing']],
