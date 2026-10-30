@@ -48,7 +48,14 @@ final class ModuleRegistry
             }
             if ($enabled) {
                 if ($key === 'pos') {
-                    app(PosAccountingGate::class)->mode();
+                    try {
+                        app(PosAccountingGate::class)->mode();
+                    } catch (\Symfony\Component\HttpKernel\Exception\HttpException $exception) {
+                        if ($exception->getStatusCode() !== 423) {
+                            throw $exception;
+                        }
+                        $fail('POS is locked until live accounting is activated. Open Accounting and use Activate live retail after setup. Local training POS is available only when POS_TRAINING_ENABLED is enabled in a local or test environment.');
+                    }
                 }
                 foreach ($definition['depends'] as $dependency) {
                     if (! TenantModule::where('key', $dependency)->where('enabled', true)->exists()) {
