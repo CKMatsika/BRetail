@@ -252,6 +252,7 @@ export default function Auth({ mode, templates = {} }: Props) {
                         </Link>
                     </p>
                 </div>
+                <footer className="copyright-footer auth-copyright">© 2026 Betterlink Industries Pvt Ltd</footer>
             </main>
         </div>
     );

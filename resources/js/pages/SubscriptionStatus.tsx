@@ -23,6 +23,7 @@ export default function SubscriptionStatus({ organization, status, message, supp
                 {platform_staff && <Link className="secondary button-link" href="/platform/organizations">Open platform administration</Link>}
                 <button className="secondary" onClick={() => router.post("/logout")}><LogOut size={15} /> Sign out</button>
             </div>
+            <footer className="copyright-footer">© 2026 Betterlink Industries Pvt Ltd</footer>
         </section>
     </main>;
 }

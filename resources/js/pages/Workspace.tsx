@@ -1164,11 +1164,7 @@ export default function Workspace(p: Props) {
                         </section>
                     )}
                     <footer className="footer">
-                        <span>BRetail · Built for your next chapter.</span>
-                        <span>
-                            <ShieldCheck size={13} />
-                            Tenant-isolated workspace
-                        </span>
+                        <span>© 2026 Betterlink Industries Pvt Ltd</span>
                     </footer>
                 </div>
             </main>

@@ -156,7 +156,7 @@ export default function PlatformAdmin(p: Props) {
                         {!p.activity.length && <tr><td colSpan={5}>No platform changes recorded yet.</td></tr>}
                     </tbody></table></div>
                 </section>
-                <footer className="platform-footer">Signed in as {p.user.email}{p.support_email && <> · Support: <a href={`mailto:${p.support_email}`}>{p.support_email}</a></>}</footer>
+                <footer className="platform-footer"><span>© 2026 Betterlink Industries Pvt Ltd</span><span>Signed in as {p.user.email}{p.support_email && <> · Support: <a href={`mailto:${p.support_email}`}>{p.support_email}</a></>}</span></footer>
             </main>
         </div>
     );
