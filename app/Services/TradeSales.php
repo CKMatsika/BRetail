@@ -17,17 +17,27 @@ use Illuminate\Support\Facades\Validator;
 
 final class TradeSales
 {
-    public function quote(User $u, array $input): TradeDocument
+    public function quote(User $u, array $input, ?int $revises = null, bool $preview = false): TradeDocument|array
     {
-        $d = Validator::make($input, ['currency' => 'nullable|string|size:3', 'request_id' => 'required|uuid', 'warehouse_id' => 'required|integer', 'customer_id' => 'required|integer', 'date' => 'required|date_format:Y-m-d', 'due_on' => 'required|date_format:Y-m-d|after_or_equal:date', 'reference' => 'required|string|max:100', 'notes' => 'nullable|string|max:2000', 'items' => 'required|array|min:1|max:500', 'items.*.variant_id' => 'required|integer|distinct', 'items.*.quantity' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,3})?$/'], 'items.*.unit_price' => ['required', 'string', Catalog::MONEY], 'items.*.discount_percent' => ['required', 'string', 'numeric', 'between:0,100', 'decimal:0,2']])->validate();
+        $d = Validator::make($input, ['prices_include_vat' => 'sometimes|boolean', 'currency' => 'nullable|string|size:3', 'request_id' => 'required|uuid', 'warehouse_id' => 'required|integer', 'customer_id' => 'required|integer', 'date' => 'required|date_format:Y-m-d', 'due_on' => 'required|date_format:Y-m-d|after_or_equal:date', 'reference' => 'required|string|max:100', 'notes' => 'nullable|string|max:2000', 'items' => 'required|array|min:1|max:500', 'items.*.variant_id' => 'required|integer|distinct', 'items.*.quantity' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,3})?$/'], 'items.*.unit_price' => ['required', 'string', Catalog::MONEY], 'items.*.discount_percent' => ['required', 'string', 'numeric', 'between:0,100', 'decimal:0,2']])->validate();
 
-        return DB::transaction(function () use ($u, $d) {
+        return DB::transaction(function () use ($u, $d, $revises, $preview) {
             $t = app(TradeLedger::class);
             $t->lock($u, 'sales.quote');
             InventoryAccess::warehouse($u, $d['warehouse_id']);
-            if ($old = $t->existing($d['request_id'], $d)) {
+            $payload = $revises ? [...$d, 'revises' => $revises] : $d;
+            if (! $preview && ($old = $t->existing($d['request_id'], $payload))) {
                 return $old;
-            }$customer = PosCustomer::findOrFail($d['customer_id']);
+            }
+            if ($revises) {
+                $previous = TradeDocument::where('kind', 'quote')->findOrFail($revises);
+                InventoryAccess::warehouse($u, $previous->warehouse_id);
+                if ($previous->book !== AccountingAccess::book() || TradeDocument::where('parent_id', $previous->id)->whereIn('kind', ['quote', 'invoice'])->exists()) {
+                    TradeLedger::fail('This quotation was already revised or invoiced. Open its latest version.');
+                }
+            }
+            $t->date($d['date']);
+            $customer = PosCustomer::findOrFail($d['customer_id']);
             $items = [];
             $rate = (string) (Company::firstOrFail()->settings['tax_rate'] ?? '0');
             foreach ($d['items'] as $i) {
@@ -35,12 +45,15 @@ final class TradeSales
                 if (! $v->active || ! $v->product->active || ! BigDecimal::of($i['quantity'])->isPositive()) {
                     TradeLedger::fail('Choose active products and positive quantities.');
                 }$tax = $v->product->tax_class === 'standard' ? $rate : '0';
-                $items[] = [...$i, 'description' => $v->product->name.' / '.$v->name, 'sku' => $v->sku, 'tax_rate' => $tax, ...PosMath::line($i['quantity'], $i['unit_price'], $i['discount_percent'], $tax)];
+                $items[] = [...$i, 'prices_include_vat' => (bool) ($d['prices_include_vat'] ?? false), 'description' => $v->product->name.' / '.$v->name, 'sku' => $v->sku, 'tax_rate' => $tax, ...PosMath::line($i['quantity'], $i['unit_price'], $i['discount_percent'], $tax, (bool) ($d['prices_include_vat'] ?? false))];
             }
             $converted = app(TradeCurrency::class)->convert($items, $d['currency'] ?? null, $d['date']);
             $items = $converted['items'];
-            $doc = $t->document($u, 'quote', [...collect($d)->except('items', 'currency')->all(), 'party_name' => $customer->name, 'currency_snapshot' => $converted['snapshot']], $items, PosMath::sum(array_column($items, 'net')), PosMath::sum(array_column($items, 'tax')), PosMath::sum(array_column($items, 'total')), $d);
-            Audit::record('sales.quote_created', (string) $doc->id);
+            if ($preview) {
+                return ['items' => $items, 'currency_snapshot' => $converted['snapshot'], 'net' => PosMath::sum(array_column($items, 'net')), 'tax' => PosMath::sum(array_column($items, 'tax')), 'total' => PosMath::sum(array_column($items, 'total'))];
+            }
+            $doc = $t->document($u, 'quote', [...collect($d)->except('items', 'currency', 'prices_include_vat')->all(), 'parent_id' => $revises, 'party_name' => $customer->name, 'currency_snapshot' => $converted['snapshot']], $items, PosMath::sum(array_column($items, 'net')), PosMath::sum(array_column($items, 'tax')), PosMath::sum(array_column($items, 'total')), $payload);
+            Audit::record($revises ? 'sales.quote_revised' : 'sales.quote_created', (string) $doc->id);
 
             return $doc;
         });
@@ -61,11 +74,11 @@ final class TradeSales
             }
             if ($q->book !== AccountingAccess::book() || $d['date'] < $q->date || $d['date'] > $q->due_on || AccountingLedger::today() > $q->due_on) {
                 TradeLedger::fail('Quotation expired or belongs to a different operating book.');
-            }if (TradeDocument::where('kind', 'invoice')->where('parent_id', $q->id)->exists()) {
-                TradeLedger::fail('Quotation was already invoiced.');
+            }if (TradeDocument::whereIn('kind', ['invoice', 'quote'])->where('parent_id', $q->id)->exists()) {
+                TradeLedger::fail('Quotation was already invoiced or revised. Open its latest version.');
             }$profile = CustomerCredit::where('customer_id', $q->customer_id)->first();
             if (! $profile || ! $profile->active) {
-                TradeLedger::fail('Configure and activate this customer’s credit profile first.');
+                TradeLedger::fail('Configure and activate this customerâ€™s credit profile first.');
             }$open = BigDecimal::zero();
             foreach (TradeDocument::where('book', $q->book)->where('customer_id', $q->customer_id)->whereIn('kind', ['invoice', 'opening_receivable'])->get() as $doc) {
                 $due = $t->outstanding($doc);

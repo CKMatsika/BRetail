@@ -14,6 +14,12 @@ Enable Inventory, Accounting, and Purchasing or Sales & customers in Modules. In
 
 Create the customer, then have a company-wide authorized user configure an active credit limit and terms. Create a quotation with its expiry, items, prices and discounts. Quotes do not reserve stock or post journals.
 
+Choose **Unit prices: Include VAT** when entering VAT-inclusive prices; VAT is extracted from the discounted line amount rather than added again. **Exclude VAT** retains the existing behavior. Zero-rated products remain untaxed in either mode. **Preview totals** calculates net, VAT and total on the server without saving or moving stock.
+
+Use **Edit quotation** on an uninvoiced quote to correct prices, items, customer, warehouse or dates. **Save revised quotation** creates a linked revision and keeps the old record for audit history. Only the latest version may be invoiced. The **Accept and invoice** screen displays the invoice preview with an option to return to editing before posting. **Preview invoice** displays a posted invoice, and Print shows its price basis and tax breakdown.
+
+Posted invoices remain immutable. **Create corrected quote** copies an invoice into a new quotation; it does not reverse the original invoice. Reverse eligible unpaid items through the existing return workflow before posting a replacement. Paid or partially settled corrections require a separately reviewed workflow.
+
 With Multi-currency enabled, choose the quotation currency and enter prices in that currency. On acceptance, the invoice preserves the quote's original item values and historical rate. Credit limits and inventory carrying cost remain measured in base currency.
 
 After customer acceptance, choose Accept and invoice. The server checks expiry, available stock, overdue balances and the credit limit before posting the invoice and stock cost together. Receive payment in the invoice currency using a same-branch bank, safe or mobile account. The invoice's historical base carrying value is allocated; settlement-date exchange differences are recorded.

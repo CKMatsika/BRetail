@@ -20,6 +20,8 @@
 </head>
 <body>
 <main>
+@include('partials.company-logo')
+
     <header>
         <div><p class="muted">{{ $company }}</p><h1>Pay statement</h1><strong>{{ $run->period_start->format('F Y') }}</strong></div>
         <div><button onclick="window.print()">Print / Save PDF</button><p class="muted">Approved payroll · {{ $run->currency === 'MIXED' ? 'USD + ZWG' : $run->currency }}</p></div>

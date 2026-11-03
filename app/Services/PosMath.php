@@ -29,11 +29,17 @@ final class PosMath
         return (string) $total->toScale($scale, RoundingMode::HalfUp);
     }
 
-    public static function line(string $quantity, string $price, string $discount, string $taxRate): array
+    public static function line(string $quantity, string $price, string $discount, string $taxRate, bool $inclusive = false): array
     {
         $subtotal = BigDecimal::of($quantity)->multipliedBy($price)->toScale(2, RoundingMode::HalfUp);
         $off = $subtotal->multipliedBy($discount)->dividedBy('100', 2, RoundingMode::HalfUp);
         $net = $subtotal->minus($off);
+        if ($inclusive) {
+            $total = $net;
+            $net = $total->multipliedBy('100')->dividedBy(BigDecimal::of('100')->plus($taxRate), 2, RoundingMode::HalfUp);
+
+            return ['subtotal' => (string) $subtotal, 'discount' => (string) $off, 'net' => (string) $net, 'tax' => (string) $total->minus($net), 'total' => (string) $total];
+        }
         $tax = $net->multipliedBy($taxRate)->dividedBy('100', 2, RoundingMode::HalfUp);
 
         return ['subtotal' => (string) $subtotal, 'discount' => (string) $off, 'net' => (string) $net, 'tax' => (string) $tax, 'total' => (string) $net->plus($tax)];

@@ -48,7 +48,7 @@ Route::middleware(['auth', 'tenant', 'module:pos', 'module:inventory'])->control
 Route::get('/inventory', [InventoryController::class, 'page'])->middleware(['auth', 'tenant', 'module:inventory']);
 Route::middleware(['auth', 'tenant'])->controller(WorkspaceController::class)->group(function () {
     Route::post('/company/logo', [CompanyLogoController::class, 'store'])->middleware('module:administration');
-    Route::get('/company/logo', [CompanyLogoController::class, 'show'])->middleware('module:administration');
+    Route::get('/company/logo', [CompanyLogoController::class, 'show']);
     foreach (['dashboard' => 'dashboard', 'branches' => 'branches', 'team' => 'access', 'company' => 'administration', 'modules' => 'administration', 'audit' => 'administration'] as $section => $module) {
         Route::get('/'.$section, 'page')->defaults('section', $section)->middleware('module:'.$module);
     }

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AccountingPeriod;
+use App\Models\Company;
 use App\Models\PosCustomer;
 use App\Models\ProductVariant;
 use App\Models\PurchaseOrder;
@@ -29,7 +30,9 @@ use App\Services\TradePurchasing;
 use App\Services\TradeSales;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -52,6 +55,7 @@ class TradeTest extends TestCase
         $this->withoutVite();
         $this->u = app(Onboarding::class)->register(['name' => 'Owner', 'email' => 'trade@example.test', 'password' => 'SecurePassword123', 'company_name' => 'Trade shop', 'industry' => 'general', 'base_currency' => 'USD', 'branch_name' => 'Main', 'branch_code' => 'MAIN', 'warehouse_name' => 'Main']);
         TenantModule::whereIn('key', ['inventory', 'accounting', 'purchasing', 'sales', 'backoffice'])->update(['enabled' => true]);
+        DB::table('tenant_subscriptions')->where('tenant_id', $this->u->tenant_id)->update(['status' => 'active']);
         $this->w = Warehouse::first();
         $today = AccountingLedger::today();
         app(AccountingSetup::class)->initialize($this->u, ['name' => 'FY', 'starts_on' => substr($today, 0, 4).'-01-01', 'ends_on' => substr($today, 0, 4).'-12-31']);
@@ -100,6 +104,76 @@ class TradeTest extends TestCase
         app(TradeLedger::class)->credit($this->u, ['customer_id' => $c->id, 'credit_limit' => '100', 'terms_days' => 30, 'active' => true]);
 
         return app(TradeSales::class)->quote($this->u, $this->request(['warehouse_id' => $this->w->id, 'customer_id' => $c->id, 'due_on' => AccountingLedger::today(), 'items' => [['variant_id' => $this->v->id, 'quantity' => $qty, 'unit_price' => '10', 'discount_percent' => '0']]]));
+    }
+
+    public function test_vat_inclusive_preview_matches_saved_quote_without_posting(): void
+    {
+        $product = $this->v->product;
+        $product->update(['tax_class' => 'standard']);
+        $company = Company::firstOrFail();
+        $company->update(['settings' => [...($company->settings ?? []), 'tax_rate' => '15']]);
+        $c = PosCustomer::create(['name' => 'VAT Customer']);
+        $d = $this->request(['warehouse_id' => $this->w->id, 'customer_id' => $c->id, 'due_on' => AccountingLedger::today(), 'prices_include_vat' => true, 'items' => [['variant_id' => $this->v->id, 'quantity' => '2', 'unit_price' => '115', 'discount_percent' => '10']]]);
+        $preview = app(TradeSales::class)->quote($this->u, $d, null, true);
+        $this->assertSame('180.00', $preview['net']);
+        $this->assertSame('27.00', $preview['tax']);
+        $this->assertSame('207.00', $preview['total']);
+        $this->assertSame(0, TradeDocument::count());
+        $this->assertSame('0.0000', $this->balance('receivable'));
+        $q = app(TradeSales::class)->quote($this->u, $d);
+        $this->assertSame($preview['items'], $q->items);
+        $exclusive = app(TradeSales::class)->quote($this->u, [...$d, 'prices_include_vat' => false], null, true);
+        $this->assertSame('238.05', $exclusive['total']);
+    }
+
+    public function test_quote_and_invoice_print_include_the_uploaded_company_logo(): void
+    {
+        Storage::fake('local');
+        $logo = UploadedFile::fake()->image('brand.png', 240, 80);
+        $path = $logo->store('company-logos/'.$this->u->tenant_id, 'local');
+        Company::firstOrFail()->update(['logo_path' => $path]);
+        $this->receive($this->order(), '2');
+        $quote = $this->quote();
+        $invoice = app(TradeSales::class)->invoice($this->u, $quote->id, $this->request(['accepted' => true]));
+        foreach ([$quote, $invoice] as $document) {
+            $this->actingAs($this->u)->get('/trade/print/document/'.$document->id)->assertOk()->assertSee('data:image/png;base64,', false)->assertSee('Trade shop logo');
+        }
+    }
+
+    public function test_quote_preview_and_revision_endpoints_enforce_permissions(): void
+    {
+        $q = $this->quote();
+        $d = $this->request(['warehouse_id' => $q->warehouse_id, 'customer_id' => $q->customer_id, 'due_on' => $q->due_on, 'prices_include_vat' => true, 'items' => [['variant_id' => $this->v->id, 'quantity' => '1', 'unit_price' => '8', 'discount_percent' => '0']]]);
+        $this->actingAs($this->u)->postJson('/trade/quote-preview/'.$q->id, $d)->assertOk()->assertJsonPath('data.total', '8.00');
+        $revised = $this->postJson('/trade/quotes/'.$q->id, $d)->assertOk()->json('data');
+        $this->assertSame($q->id, $revised['parent_id']);
+        $this->getJson('/trade/data')->assertOk()->assertJsonPath('data.documents.0.quote_closed', false)->assertJsonPath('data.documents.1.quote_closed', true);
+        $this->postJson('/trade/quotes/'.$q->id, [...$d, 'request_id' => (string) Str::uuid()])->assertUnprocessable();
+        app(TenantContext::class)->id = $this->u->tenant_id;
+        $this->assertSame(2, TradeDocument::where('kind', 'quote')->count());
+        $role = $this->u->role;
+        $role->update(['permissions' => ['sales.view']]);
+        $this->u->unsetRelation('role');
+        $this->postJson('/trade/quote-preview', $d)->assertForbidden();
+        $this->postJson('/trade/quotes/'.$revised['id'], $d)->assertForbidden();
+    }
+
+    public function test_quote_revisions_preserve_history_and_only_latest_can_be_invoiced(): void
+    {
+        $this->receive($this->order(), '10');
+        $old = $this->quote();
+        $d = $this->request(['warehouse_id' => $old->warehouse_id, 'customer_id' => $old->customer_id, 'due_on' => $old->due_on, 'items' => [['variant_id' => $this->v->id, 'quantity' => '1', 'unit_price' => '8', 'discount_percent' => '0']]]);
+        $q = app(TradeSales::class)->quote($this->u, $d, $old->id);
+        $this->assertSame($old->id, $q->parent_id);
+        $this->assertSame('10.0000', $old->fresh()->total);
+        $this->assertSame('8.0000', $q->total);
+        $this->assertSame($q->id, app(TradeSales::class)->quote($this->u, $d, $old->id)->id);
+        $this->invalid(fn () => app(TradeSales::class)->invoice($this->u, $old->id, $this->request(['accepted' => true])));
+        $this->invalid(fn () => app(TradeSales::class)->quote($this->u, [...$d, 'request_id' => (string) Str::uuid()], $old->id));
+        $invoice = app(TradeSales::class)->invoice($this->u, $q->id, $this->request(['accepted' => true]));
+        $this->assertSame('8.0000', $invoice->total);
+        $this->assertSame('9.000', StockBalance::first()->quantity);
+        $this->invalid(fn () => app(TradeSales::class)->quote($this->u, [...$d, 'request_id' => (string) Str::uuid()], $q->id));
     }
 
     public function test_partial_receipts_bills_and_duplicate_prevention(): void
@@ -337,6 +411,6 @@ class TradeTest extends TestCase
         $next = $this->quote();
         $this->invalid(fn () => app(TradeSales::class)->invoice($this->u, $next->id, $this->request(['accepted' => true])));
         $this->travelBack();
-        $this->assertSame('9.000',StockBalance::first()->quantity);
+        $this->assertSame('9.000', StockBalance::first()->quantity);
     }
 }

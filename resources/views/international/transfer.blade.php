@@ -15,6 +15,8 @@
 </head>
 <body>
 <main>
+@include('partials.company-logo')
+
     <h1>{{ $company->name }}</h1>
     <h2>Branch transfer {{ $transfer->reference }}</h2>
     <p>{{ strtoupper($transfer->book) }} · {{ $transfer->status }} · Created {{ $transfer->date }}</p>
