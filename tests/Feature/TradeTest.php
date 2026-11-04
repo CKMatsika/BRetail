@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AccountingPeriod;
+use App\Models\Branch;
 use App\Models\Company;
 use App\Models\PosCustomer;
 use App\Models\ProductVariant;
@@ -24,14 +25,17 @@ use App\Services\CurrencyRates;
 use App\Services\ForeignLedger;
 use App\Services\Onboarding;
 use App\Services\PurchaseOrders;
+use App\Services\ReportsAnalytics;
 use App\Services\StockLedger;
 use App\Services\Suppliers;
 use App\Services\TenantContext;
+use App\Services\TradeAging;
 use App\Services\TradeCurrency;
 use App\Services\TradeInvoiceEdits;
 use App\Services\TradeLedger;
 use App\Services\TradePurchasing;
 use App\Services\TradeSales;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -517,20 +521,120 @@ class TradeTest extends TestCase
         $this->actingAs($this->u)->postJson('/trade/invoice-edits/'.$edited->id, $this->invoiceEditData($edited))->assertForbidden();
         $this->postJson('/trade/invoice-details/'.$edited->id, $this->request(['reference' => 'No permission']))->assertForbidden();
     }
+
     public function test_service_invoice_edits_need_no_stock_and_create_no_new_quotation(): void
     {
         $this->v->product->update(['item_type' => 'service']);
         $quote = $this->quote();
         $invoice = app(TradeSales::class)->invoice($this->u, $quote->id, $this->request(['accepted' => true]));
-        $edited = app(\App\Services\TradeInvoiceEdits::class)->amend($this->u, $invoice->id, $this->invoiceEditData($invoice, '2'));
+        $edited = app(TradeInvoiceEdits::class)->amend($this->u, $invoice->id, $this->invoiceEditData($invoice, '2'));
         $this->assertSame($invoice->number, $edited->display_number);
         $this->assertSame('24.0000', $this->balance('receivable'));
         $this->assertSame(0, StockBalance::count());
-        $this->assertSame(0, \App\Models\StockMovement::count());
+        $this->assertSame(0, StockMovement::count());
         $this->assertSame(1, TradeDocument::where('kind', 'quote')->count());
         $report = app(TradeLedger::class)->report($this->u);
         $this->assertCount(1, $report['aging']);
         $this->assertSame($invoice->number, $report['aging'][0]['number']);
     }
 
+    public function test_historical_ageing_ignores_later_payments_and_reconciles_to_the_cutoff(): void
+    {
+        $this->v->product->update(['item_type' => 'service']);
+        $cutoff = CarbonImmutable::parse(AccountingLedger::today())->subDays(5)->format('Y-m-d');
+        $this->travelTo(now()->subDays(5));
+        $quote = $this->quote('2');
+        $invoice = app(TradeSales::class)->invoice($this->u, $quote->id, $this->request(['accepted' => true]));
+        $this->travelBack();
+        app(TradeLedger::class)->settle($this->u, $invoice->id, $this->request(['account_id' => app(AccountingLedger::class)->account('cash_safe')->id, 'amount' => '5']));
+        $old = app(TradeAging::class)->run($this->u, ['to' => $cutoff]);
+        $now = app(TradeAging::class)->run($this->u);
+        $this->assertSame('20.0000', $old['totals']['receivable']['total']);
+        $this->assertSame('15.0000', $now['totals']['receivable']['total']);
+        $this->assertSame('0.0000', collect($old['controls'])->firstWhere('role', 'receivable')['unallocated']);
+        $this->assertSame('0.0000', collect($now['controls'])->firstWhere('role', 'receivable')['unallocated']);
+    }
+
+    public function test_historical_ageing_uses_the_invoice_version_effective_at_cutoff(): void
+    {
+        $this->v->product->update(['item_type' => 'service']);
+        $cutoff = CarbonImmutable::parse(AccountingLedger::today())->subDays(5)->format('Y-m-d');
+        $this->travelTo(now()->subDays(5));
+        $quote = $this->quote('2');
+        $invoice = app(TradeSales::class)->invoice($this->u, $quote->id, $this->request(['accepted' => true]));
+        $this->travelBack();
+        $edited = app(TradeInvoiceEdits::class)->amend($this->u, $invoice->id, $this->invoiceEditData($invoice, '3'));
+        $old = app(TradeAging::class)->run($this->u, ['to' => $cutoff]);
+        $now = app(TradeAging::class)->run($this->u);
+        $this->assertCount(1, $old['aging']);
+        $this->assertSame($invoice->id, $old['aging'][0]['id']);
+        $this->assertSame('20.0000', $old['totals']['receivable']['total']);
+        $this->assertCount(1, $now['aging']);
+        $this->assertSame($edited->id, $now['aging'][0]['id']);
+        $this->assertSame('36.0000', $now['totals']['receivable']['total']);
+        $this->assertSame($invoice->number, $now['aging'][0]['number']);
+        $this->assertSame('0.0000', collect($old['controls'])->firstWhere('role', 'receivable')['unallocated']);
+    }
+
+    public function test_ageing_bucket_boundaries_keep_debtors_and_creditors_separate(): void
+    {
+        $today = CarbonImmutable::parse(AccountingLedger::today());
+        $customer = PosCustomer::create(['name' => 'Ageing customer']);
+        foreach ([0, 1, 30, 31, 60, 61, 90, 91] as $days) {
+            foreach (['opening_receivable', 'opening_payable'] as $kind) {
+                app(TradeLedger::class)->document($this->u, $kind, $this->request(['warehouse_id' => $this->w->id, 'date' => $today->subDays(100)->format('Y-m-d'), 'due_on' => $today->subDays($days)->format('Y-m-d'), 'party_name' => $kind === 'opening_receivable' ? $customer->name : $this->supplier->name, 'customer_id' => $kind === 'opening_receivable' ? $customer->id : null, 'supplier_id' => $kind === 'opening_payable' ? $this->supplier->id : null]), [], '10', '0', '10', []);
+            }
+        }
+        $r = app(TradeAging::class)->run($this->u);
+        foreach (['receivable', 'payable'] as $role) {
+            $this->assertSame(['current' => '10.0000', '1–30' => '20.0000', '31–60' => '20.0000', '61–90' => '20.0000', '90+' => '10.0000', 'total' => '80.0000'], $r['totals'][$role]);
+        }
+        $this->assertCount(2, $r['parties']);
+    }
+
+    public function test_report_centre_sales_net_revisions_exports_and_procurement_values(): void
+    {
+        TenantModule::where('key', 'reports')->update(['enabled' => true]);
+        $this->v->product->update(['item_type' => 'service']);
+        $invoice = app(TradeSales::class)->invoice($this->u, $this->quote('2')->id, $this->request(['accepted' => true]));
+        app(TradeInvoiceEdits::class)->amend($this->u, $invoice->id, $this->invoiceEditData($invoice, '3'));
+        $filters = ['from' => AccountingLedger::today(), 'to' => AccountingLedger::today(), 'book' => 'training'];
+        $report = app(ReportsAnalytics::class)->run($this->u, $filters);
+        $this->assertSame('36.0000', $report['business']['sales']['total']);
+        $this->assertCount(3, $report['business']['sales']['documents']);
+        $this->assertSame('36.0000', $report['accounting']['profit_loss']['income']);
+        $this->assertCount(1, $report['business']['aging']['aging']);
+        $this->actingAs($this->u)->get('/reports?'.http_build_query($filters))->assertOk();
+        foreach (['debtors', 'creditors', 'profit_loss', 'balance_sheet', 'trial_balance', 'general_ledger', 'cash_flow', 'sales', 'procurement'] as $name) {
+            $this->get('/reports/export?'.http_build_query([...$filters, 'report' => $name]))->assertOk()->assertDownload('bretail-'.$name.'-'.$filters['to'].'.csv');
+        }
+        app(TenantContext::class)->id = $this->u->tenant_id;
+        $this->v->product->update(['item_type' => 'stock']);
+        $this->order('3');
+        $purchase = app(ReportsAnalytics::class)->run($this->u, $filters)['business']['procurement'];
+        $this->assertSame('9.9999', $purchase['orders'][0]['total']);
+    }
+
+    public function test_report_centre_respects_branch_scope_and_finance_permissions(): void
+    {
+        TenantModule::where('key', 'reports')->update(['enabled' => true]);
+        $this->v->product->update(['item_type' => 'service']);
+        app(TradeSales::class)->invoice($this->u, $this->quote()->id, $this->request(['accepted' => true]));
+        $branch = Branch::create(['name' => 'Restricted branch', 'code' => 'RESTRICT']);
+        $role = Role::create(['name' => 'Report reader', 'company_wide' => false, 'permissions' => ['reports.view', 'reports.export', 'sales.view']]);
+        $reader = new User(['name' => 'Reader', 'email' => 'report-reader@example.test', 'password' => 'SecurePassword123']);
+        $reader->tenant_id = $this->u->tenant_id;
+        $reader->role_id = $role->id;
+        $reader->save();
+        $reader->branches()->attach($branch->id, ['tenant_id' => $this->u->tenant_id]);
+        $filters = ['from' => AccountingLedger::today(), 'to' => AccountingLedger::today(), 'book' => 'training'];
+        $r = app(ReportsAnalytics::class)->run($reader, $filters);
+        $this->assertNull($r['accounting']);
+        $this->assertNull($r['business']['procurement']);
+        $this->assertSame('0.0000', $r['business']['sales']['total']);
+        $this->assertEmpty($r['business']['aging']['aging']);
+        $this->actingAs($reader)->get('/reports/export?'.http_build_query([...$filters, 'report' => 'balance_sheet']))->assertForbidden();
+        $this->get('/reports/export?'.http_build_query([...$filters, 'report' => 'creditors']))->assertForbidden();
+        $this->get('/reports?'.http_build_query([...$filters, 'branch_id' => $this->w->branch_id]))->assertNotFound();
+    }
 }

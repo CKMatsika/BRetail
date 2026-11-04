@@ -41,3 +41,7 @@ The Phase 3 training-only boundary above describes the earlier release. Phase 4 
 ## Purchasing and customer credit
 
 See [the trade operating guide](trade-guide.md) for orders, receiving, supplier bills, quotations, customer credit and aging.
+
+## Interface foundations
+
+The shared ERP interface uses neutral white/slate surfaces, a restrained navy action colour, Segoe UI/system fonts, consistent control heights, compact bordered cards and aligned numeric tables. Navigation is ordered by operations, finance/reporting, people and administration. Status colours remain semantic. Keyboard focus, reduced-motion preferences, desktop/mobile navigation and dark mode are preserved. Report outputs have a dedicated print layout which removes application navigation and filters.

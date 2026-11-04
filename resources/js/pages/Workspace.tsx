@@ -13,6 +13,11 @@ import { useDialog } from "../useDialog";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import {
     ShoppingBag,
+    BookOpen,
+    BarChart3,
+    Truck,
+    Landmark,
+    ArrowLeftRight,
     LayoutDashboard,
     Building2,
     Users,
@@ -84,7 +89,16 @@ type Props = InventoryProps &
         modules: Module[];
         users?: Person[];
         roles?: { id: number; name: string; permissions: string[] }[];
-        devices?: { id: number; device_uuid: string; name: string; platform: string; user: string; branch: string; last_seen_at: string | null; revoked_at: string | null }[];
+        devices?: {
+            id: number;
+            device_uuid: string;
+            name: string;
+            platform: string;
+            user: string;
+            branch: string;
+            last_seen_at: string | null;
+            revoked_at: string | null;
+        }[];
         events?: {
             id: number;
             action: string;
@@ -94,20 +108,61 @@ type Props = InventoryProps &
         flash?: { success?: string };
     };
 const nav = [
-    {key: "hr", label: "People & HR", icon: Users, permission: "hr.view"},
-    {key: "payroll", label: "Payroll", icon: Activity, permission: "payroll.view"},
-    {key: "currencies", label: "Currencies & transfers", icon: Building2, permission: "currencies.view"},
-    {key: "purchasing", label: "Procurement", icon: Boxes, permission: "purchasing.view"},
-    {key: "sales", label: "Customers & sales", icon: ShoppingBag, permission: "sales.view"},
-    {key: "backoffice", label: "Back office", icon: Boxes, permission: "purchasing.view"},
+    {
+        key: "dashboard",
+        label: "Overview",
+        icon: LayoutDashboard,
+        permission: "dashboard.view",
+    },
+    { key: "hr", label: "People & HR", icon: Users, permission: "hr.view" },
+    {
+        key: "payroll",
+        label: "Payroll",
+        icon: Activity,
+        permission: "payroll.view",
+    },
+    {
+        key: "currencies",
+        label: "Currencies & transfers",
+        icon: ArrowLeftRight,
+        permission: "currencies.view",
+    },
+    {
+        key: "purchasing",
+        label: "Procurement",
+        icon: Truck,
+        permission: "purchasing.view",
+    },
+    {
+        key: "sales",
+        label: "Customers & sales",
+        icon: ShoppingBag,
+        permission: "sales.view",
+    },
+    {
+        key: "backoffice",
+        label: "Back office",
+        icon: Landmark,
+        permission: "purchasing.view",
+    },
     {
         key: "accounting",
         label: "Accounting & finance",
-        icon: Activity,
+        icon: BookOpen,
         permission: "accounting.view",
     },
-    { key: "reports", label: "Reports & analytics", icon: Activity, permission: "reports.view" },
-    { key: "loyalty", label: "Loyalty & promotions", icon: Award, permission: "loyalty.view" },
+    {
+        key: "reports",
+        label: "Reports & analytics",
+        icon: BarChart3,
+        permission: "reports.view",
+    },
+    {
+        key: "loyalty",
+        label: "Loyalty & promotions",
+        icon: Award,
+        permission: "loyalty.view",
+    },
     {
         key: "pos",
         label: "Point of sale",
@@ -119,12 +174,6 @@ const nav = [
         label: "Inventory",
         icon: Boxes,
         permission: "inventory.view",
-    },
-    {
-        key: "dashboard",
-        label: "Overview",
-        icon: LayoutDashboard,
-        permission: "dashboard.view",
     },
     {
         key: "branches",
@@ -163,6 +212,41 @@ const nav = [
         permission: "audit.view",
     },
 ];
+const navigationOrder = [
+    "dashboard",
+    "pos",
+    "sales",
+    "purchasing",
+    "inventory",
+    "loyalty",
+    "backoffice",
+    "accounting",
+    "reports",
+    "currencies",
+    "hr",
+    "payroll",
+    "branches",
+    "team",
+    "devices",
+    "modules",
+    "company",
+    "audit",
+];
+const navigationGroup = (key: string) =>
+    ["backoffice", "accounting", "reports", "currencies"].includes(key)
+        ? "Finance & reporting"
+        : ["hr", "payroll"].includes(key)
+          ? "People"
+          : [
+                  "branches",
+                  "team",
+                  "devices",
+                  "modules",
+                  "company",
+                  "audit",
+              ].includes(key)
+            ? "Administration"
+            : "Operations";
 function Errors({ errors }: { errors: Record<string, string | undefined> }) {
     return Object.keys(errors).length ? (
         <div className="notice error" role="alert">
@@ -477,11 +561,14 @@ export default function Workspace(p: Props) {
                 </Link>
                 <div className="company-switch">
                     <span className="company-avatar">
-                        {p.company.logo_url && failedLogo !== p.company.logo_url ? (
+                        {p.company.logo_url &&
+                        failedLogo !== p.company.logo_url ? (
                             <img
                                 src={p.company.logo_url}
                                 alt="Company logo"
-                                onError={() => setFailedLogo(p.company.logo_url ?? null)}
+                                onError={() =>
+                                    setFailedLogo(p.company.logo_url ?? null)
+                                }
                                 style={{
                                     width: "100%",
                                     height: "100%",
@@ -504,7 +591,8 @@ export default function Workspace(p: Props) {
                         .filter(
                             (n) =>
                                 (can(n.permission) ||
-                                    (n.key === "backoffice" && can("sales.view"))) &&
+                                    (n.key === "backoffice" &&
+                                        can("sales.view"))) &&
                                 p.modules.some(
                                     (m) =>
                                         m.key ===
@@ -519,19 +607,34 @@ export default function Workspace(p: Props) {
                                             )[n.key] ?? n.key) && m.enabled,
                                 ),
                         )
-                        .map((n) => (
-                            <Link
-                                key={n.key}
-                                href={"/" + n.key}
-                                onClick={() => setMenu(false)}
-                                className={p.section === n.key ? "active" : ""}
-                            >
-                                <n.icon size={19} />
-                                {n.label}
-                                {p.section === n.key && (
-                                    <span className="nav-active-dot" />
+                        .sort(
+                            (a, b) =>
+                                navigationOrder.indexOf(a.key) -
+                                navigationOrder.indexOf(b.key),
+                        )
+                        .map((n, index, visible) => (
+                            <React.Fragment key={n.key}>
+                                {(index === 0 ||
+                                    navigationGroup(visible[index - 1].key) !==
+                                        navigationGroup(n.key)) && (
+                                    <span className="nav-section-label">
+                                        {navigationGroup(n.key)}
+                                    </span>
                                 )}
-                            </Link>
+                                <Link
+                                    href={"/" + n.key}
+                                    onClick={() => setMenu(false)}
+                                    className={
+                                        p.section === n.key ? "active" : ""
+                                    }
+                                >
+                                    <n.icon size={19} />
+                                    {n.label}
+                                    {p.section === n.key && (
+                                        <span className="nav-active-dot" />
+                                    )}
+                                </Link>
+                            </React.Fragment>
                         ))}
                 </nav>
                 <div className="sidebar-bottom">
@@ -610,7 +713,7 @@ export default function Workspace(p: Props) {
                             <div className="eyebrow">
                                 {p.section === "dashboard"
                                     ? "A CLEARER PICTURE, EVERY DAY"
-                                    : "YOUR BUSINESS, CONNECTED"}
+                                    : "BUSINESS OPERATIONS"}
                             </div>
                             <h1>
                                 {p.section === "dashboard"
@@ -628,7 +731,7 @@ export default function Workspace(p: Props) {
                                           ? "A clear view of sales, stock, and financial performance."
                                           : p.section === "loyalty"
                                             ? "Reward customer visits with clear rules, consent, and a complete points history."
-                                        : "A workspace that grows at your pace."}
+                                            : "A workspace that grows at your pace."}
                             </p>
                         </div>
                         {p.section === "branches" && can("branches.create") && (
@@ -656,19 +759,13 @@ export default function Workspace(p: Props) {
                                 <div>
                                     <span className="banner-tag">
                                         <span className="status-dot" />
-                                        YOUR WORKSPACE IS READY
+                                        BUSINESS WORKSPACE
                                     </span>
-                                    <h2>
-                                        Small beginnings.
-                                        <br />
-                                        Connected possibilities.
-                                    </h2>
+                                    <h2>{p.company.name}</h2>
                                     <p>
-                                        Your company, branches and people —
-                                        together in one place.
-                                        <br />
-                                        You’re building on a foundation made for
-                                        growth.
+                                        Manage daily operations, review your
+                                        reports and keep your business records
+                                        up to date.
                                     </p>
                                     {can("company.view") && (
                                         <Link
@@ -700,7 +797,7 @@ export default function Workspace(p: Props) {
                             <div className="stat-grid">
                                 {[
                                     {
-                                        label: "Your branches",
+                                        label: "Branches",
                                         value: p.branches.length,
                                         detail: "Locations in your access",
                                         icon: Building2,
@@ -719,7 +816,7 @@ export default function Workspace(p: Props) {
                                         value: p.modules.filter(
                                             (m) => m.enabled,
                                         ).length,
-                                        detail: "Core foundations enabled",
+                                        detail: "Enabled for this company",
                                         icon: Boxes,
                                     },
                                     {
@@ -818,7 +915,9 @@ export default function Workspace(p: Props) {
                                     <span className="mini-icon">
                                         <Boxes size={23} />
                                     </span>
-                                    <span className="eyebrow">WORKSPACE TOOLS</span>
+                                    <span className="eyebrow">
+                                        WORKSPACE TOOLS
+                                    </span>
                                     <h2>
                                         Manage your
                                         <br />
@@ -1026,7 +1125,13 @@ export default function Workspace(p: Props) {
                         </section>
                     )}
                     {p.section === "devices" && (
-                        <DeviceManager devices={p.devices ?? []} branches={p.branches.map(branch => ({ id: branch.id, name: branch.name }))} />
+                        <DeviceManager
+                            devices={p.devices ?? []}
+                            branches={p.branches.map((branch) => ({
+                                id: branch.id,
+                                name: branch.name,
+                            }))}
+                        />
                     )}
                     {p.section === "modules" && (
                         <>
@@ -1060,7 +1165,9 @@ export default function Workspace(p: Props) {
                                 </p>
                                 <div className="module-grid">
                                     {p.modules
-                                        .filter((m) => m.phase > 1 && m.available)
+                                        .filter(
+                                            (m) => m.phase > 1 && m.available,
+                                        )
                                         .map((m) => (
                                             <div
                                                 className="module-card"
@@ -1068,7 +1175,9 @@ export default function Workspace(p: Props) {
                                             >
                                                 <h3>{m.name}</h3>
                                                 <span className="muted">
-                                                    {m.enabled ? "Enabled" : "Available"}
+                                                    {m.enabled
+                                                        ? "Enabled"
+                                                        : "Available"}
                                                 </span>
                                                 {m.available &&
                                                     can(
@@ -1110,13 +1219,41 @@ export default function Workspace(p: Props) {
                         <Pos pos={p.pos} permissions={p.permissions} />
                     )}
                     {p.section === "accounting" && p.accounting && (
-                        <Accounting initial={p.accounting} permissions={p.permissions} />
+                        <Accounting
+                            initial={p.accounting}
+                            permissions={p.permissions}
+                        />
                     )}
                     {p.section === "hr" && p.hr && <Hr initial={p.hr} />}
-                    {p.section === "payroll" && p.payroll && <Payroll initial={p.payroll} />}
-                    {p.section === "reports" && p.analytics && <Reports initial={p.analytics} permissions={p.permissions} />}
-                    {p.section === "loyalty" && p.loyalty && <Loyalty initial={p.loyalty} />}
-                    {['purchasing','sales','backoffice'].includes(p.section) && p.trade && <Trade key={p.section} section={p.section} initial={p.trade} permissions={p.permissions} onAreaChange={(area) => router.visit("/" + area)} showBackoffice={p.modules.some((m) => m.key === "backoffice" && m.enabled)} />}
+                    {p.section === "payroll" && p.payroll && (
+                        <Payroll initial={p.payroll} />
+                    )}
+                    {p.section === "reports" && p.analytics && (
+                        <Reports
+                            initial={p.analytics}
+                            permissions={p.permissions}
+                        />
+                    )}
+                    {p.section === "loyalty" && p.loyalty && (
+                        <Loyalty initial={p.loyalty} />
+                    )}
+                    {["purchasing", "sales", "backoffice"].includes(
+                        p.section,
+                    ) &&
+                        p.trade && (
+                            <Trade
+                                key={p.section}
+                                section={p.section}
+                                initial={p.trade}
+                                permissions={p.permissions}
+                                onAreaChange={(area) =>
+                                    router.visit("/" + area)
+                                }
+                                showBackoffice={p.modules.some(
+                                    (m) => m.key === "backoffice" && m.enabled,
+                                )}
+                            />
+                        )}
                     {p.section === "inventory" && (
                         <Inventory
                             {...p}
@@ -1129,7 +1266,9 @@ export default function Workspace(p: Props) {
                                 company={p.company}
                                 editable={can("company.configure")}
                             />
-                            {can("company.configure") && <CompanyLogo logoUrl={p.company.logo_url} />}
+                            {can("company.configure") && (
+                                <CompanyLogo logoUrl={p.company.logo_url} />
+                            )}
                         </>
                     )}
                     {p.section === "audit" && (

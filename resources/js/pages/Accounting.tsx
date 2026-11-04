@@ -1,5 +1,11 @@
 import React, { useState } from "react";
 import axios from "axios";
+import {
+    FinancialReport,
+    FinancialSnapshot,
+    amount,
+    dateText,
+} from "../components/ReportViews";
 type Account = {
     id: number;
     code: string;
@@ -209,46 +215,12 @@ function Form({
         </form>
     );
 }
-type Report = {
-    trial_balance: {
-        id: number;
-        code: string;
-        name: string;
-        type: string;
-        opening: string;
-        debit: string;
-        credit: string;
-        closing: string;
-    }[];
-    general_ledger: {
-        id: number;
-        date: string;
-        journal: string;
-        account: string;
-        reference: string;
-        debit: string;
-        credit: string;
-    }[];
-    profit_loss: { income: string; expense: string; profit: string };
-    balance_sheet: {
-        assets: string;
-        liabilities: string;
-        equity_including_earnings: string;
-        unclosed_earnings: string;
-        difference: string;
-    };
-    cash_flow: {
-        exchange_effect?: string;
-        opening: string;
-        closing: string;
-        movement: string;
-        categories: Record<string, string>;
-    };
-    inventory_reconciliation: {
-        ledger: string;
-        stock: string | null;
-        difference: string | null;
-        basis: string;
+type Report = FinancialSnapshot & {
+    filters: {
+        book: string;
+        from: string;
+        to: string;
+        branch_id?: number | null;
     };
 };
 export default function Accounting({
@@ -263,6 +235,7 @@ export default function Accounting({
     const [book, setBook] = useState(initial.book);
     const [error, setError] = useState("");
     const [report, setReport] = useState<Report | null>(null);
+    const [reportView, setReportView] = useState("profit_loss");
     const [from, setFrom] = useState(initial.today.slice(0, 4) + "-01-01");
     const [to, setTo] = useState(initial.today);
     const [branch, setBranch] = useState("");
@@ -297,13 +270,11 @@ export default function Accounting({
         const r = await axios.get("/accounting/data", { params: { book: b } });
         if (!d.accounts.length && r.data.data.accounts.length) {
             setJlines(
-                r.data.data.accounts
-                    .slice(0, 2)
-                    .map((a: Account) => ({
-                        account_id: String(a.id),
-                        debit: "0",
-                        credit: "0",
-                    })),
+                r.data.data.accounts.slice(0, 2).map((a: Account) => ({
+                    account_id: String(a.id),
+                    debit: "0",
+                    credit: "0",
+                })),
             );
         }
         setD(r.data.data);
@@ -514,176 +485,96 @@ export default function Accounting({
                                 Run reports
                             </button>
                             {report && (
-                                <>
-                                    <button onClick={() => window.print()}>
-                                        Print reports
-                                    </button>
-                                    {can("export") &&
-                                        ["trial_balance", "general_ledger"].map(
-                                            (r) => (
+                                <div className="finance-report-results">
+                                    <div className="report-subheading">
+                                        <div>
+                                            <h3>
+                                                {d.setting?.currency} ·{" "}
+                                                {report.filters.book} book
+                                            </h3>
+                                            <p className="report-caption">
+                                                {dateText(report.filters.from)}{" "}
+                                                – {dateText(report.filters.to)}{" "}
+                                                ·{" "}
+                                                {report.filters.branch_id
+                                                    ? "Branch " +
+                                                      report.filters.branch_id
+                                                    : "All authorised branches"}
+                                            </p>
+                                        </div>
+                                        <button
+                                            className="secondary no-print"
+                                            onClick={() => window.print()}
+                                        >
+                                            Print report
+                                        </button>
+                                    </div>
+                                    <div
+                                        className="report-view-tabs no-print"
+                                        aria-label="Financial report"
+                                    >
+                                        {Object.entries({
+                                            profit_loss: "Profit & loss",
+                                            balance_sheet: "Balance sheet",
+                                            trial_balance: "Trial balance",
+                                            general_ledger: "General ledger",
+                                            cash_flow: "Cash flow",
+                                        }).map(([key, label]) => (
+                                            <button
+                                                key={key}
+                                                className={
+                                                    reportView === key
+                                                        ? "selected"
+                                                        : ""
+                                                }
+                                                onClick={() =>
+                                                    setReportView(key)
+                                                }
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <FinancialReport
+                                        key={reportView}
+                                        data={report}
+                                        view={reportView}
+                                        currency={d.setting?.currency}
+                                    />
+                                    {can("export") && (
+                                        <div className="report-actions no-print">
+                                            {[
+                                                "trial_balance",
+                                                "general_ledger",
+                                            ].map((r) => (
                                                 <a
+                                                    className="secondary"
                                                     key={r}
                                                     href={
                                                         "/accounting/export?" +
                                                         new URLSearchParams({
-                                                            ...reportParams,
-                                                            branch_id: branch,
+                                                            book: report.filters
+                                                                .book,
+                                                            from: report.filters
+                                                                .from,
+                                                            to: report.filters
+                                                                .to,
+                                                            branch_id: String(
+                                                                report.filters
+                                                                    .branch_id ??
+                                                                    "",
+                                                            ),
                                                             report: r,
-                                                        } as Record<
-                                                            string,
-                                                            string
-                                                        >).toString()
+                                                        })
                                                     }
                                                 >
-                                                    {" "}
                                                     Export{" "}
-                                                    {r.replaceAll(
-                                                        "_",
-                                                        " ",
-                                                    )}{" "}
+                                                    {r.replaceAll("_", " ")}
                                                 </a>
-                                            ),
-                                        )}
-                                    <div className="finance-metrics">
-                                        <p>
-                                            Income
-                                            <strong>
-                                                {report.profit_loss.income}
-                                            </strong>
-                                        </p>
-                                        <p>
-                                            Expenses
-                                            <strong>
-                                                {report.profit_loss.expense}
-                                            </strong>
-                                        </p>
-                                        <p>
-                                            Profit / loss
-                                            <strong>
-                                                {report.profit_loss.profit}
-                                            </strong>
-                                        </p>
-                                        <p>
-                                            Closing cash & bank
-                                            <strong>
-                                                {report.cash_flow.closing}
-                                            </strong>
-                                        </p>
-                                    </div>
-                                    <h3>Trial balance</h3>
-                                    <div className="finance-table">
-                                        <table>
-                                            <thead>
-                                                <tr>
-                                                    {[
-                                                        "Account",
-                                                        "Opening Dr/(Cr)",
-                                                        "Period debit",
-                                                        "Period credit",
-                                                        "Closing Dr/(Cr)",
-                                                    ].map((s) => (
-                                                        <th key={s}>{s}</th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {report.trial_balance.map(
-                                                    (r) => (
-                                                        <tr key={r.id}>
-                                                            <td>
-                                                                {r.code}{" "}
-                                                                {r.name}
-                                                            </td>
-                                                            <td>{r.opening}</td>
-                                                            <td>{r.debit}</td>
-                                                            <td>{r.credit}</td>
-                                                            <td>{r.closing}</td>
-                                                        </tr>
-                                                    ),
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <h3>Balance sheet at {to}</h3>
-                                    <p>
-                                        Assets {report.balance_sheet.assets} ·
-                                        Liabilities{" "}
-                                        {report.balance_sheet.liabilities} ·
-                                        Equity including earnings{" "}
-                                        {
-                                            report.balance_sheet
-                                                .equity_including_earnings
-                                        }
-                                    </p>
-                                    <p>
-                                        Unclosed earnings{" "}
-                                        {report.balance_sheet.unclosed_earnings}{" "}
-                                        · Balance difference{" "}
-                                        {report.balance_sheet.difference}
-                                    </p>
-                                    <h3>Cash flow</h3>
-                                    <p>
-                                        Opening {report.cash_flow.opening} ·
-                                        Movement {report.cash_flow.movement} ·
-                                        Closing {report.cash_flow.closing} · Exchange effect {report.cash_flow.exchange_effect ?? "0.0000"}
-                                    </p>
-                                    {Object.entries(
-                                        report.cash_flow.categories,
-                                    ).map(([k, v]) => (
-                                        <p key={k}>
-                                            {k}: {v}
-                                        </p>
-                                    ))}
-                                    <h3>Inventory reconciliation</h3>
-                                    <p>
-                                        {report.inventory_reconciliation.basis}
-                                    </p>
-                                    <p>
-                                        Ledger{" "}
-                                        {report.inventory_reconciliation.ledger}{" "}
-                                        · Stock{" "}
-                                        {report.inventory_reconciliation
-                                            .stock ?? "Current date only"}{" "}
-                                        · Difference{" "}
-                                        {report.inventory_reconciliation
-                                            .difference ?? "—"}
-                                    </p>
-                                    <h3>General ledger</h3>
-                                    <div className="finance-table">
-                                        <table>
-                                            <thead>
-                                                <tr>
-                                                    {[
-                                                        "Date",
-                                                        "Journal",
-                                                        "Account",
-                                                        "Reference",
-                                                        "Debit",
-                                                        "Credit",
-                                                    ].map((s) => (
-                                                        <th key={s}>{s}</th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {report.general_ledger.map(
-                                                    (r) => (
-                                                        <tr key={r.id}>
-                                                            <td>{r.date}</td>
-                                                            <td>{r.journal}</td>
-                                                            <td>{r.account}</td>
-                                                            <td>
-                                                                {r.reference}
-                                                            </td>
-                                                            <td>{r.debit}</td>
-                                                            <td>{r.credit}</td>
-                                                        </tr>
-                                                    ),
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             )}
                         </section>
                     )}

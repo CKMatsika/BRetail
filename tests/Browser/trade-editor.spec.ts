@@ -7,7 +7,7 @@ let styles: string;
 test.beforeAll(async () => {
     const result = await build({
         stdin: {
-            contents: `import React from 'react';import {createRoot} from 'react-dom/client';import Trade from './resources/js/pages/Trade';createRoot(document.getElementById('root')).render(<Trade section={window.tradeSection} initial={window.tradeFixture} permissions={['*']}/>);`,
+            contents: `import './resources/css/erp.css';import React from 'react';import {createRoot} from 'react-dom/client';import Trade from './resources/js/pages/Trade';createRoot(document.getElementById('root')).render(<div className='workspace'><div style={{width:'100%',minWidth:0}}><Trade section={window.tradeSection} initial={window.tradeFixture} permissions={['*']}/></div></div>);`,
             resolveDir: process.cwd(),
             loader: "tsx",
         },
@@ -507,7 +507,7 @@ test("procurement follows approval, receipt, supplier invoice and payment within
         .click();
     await expect(
         page.getByRole("heading", {
-            name: "Outstanding balances and aging",
+            name: "Debtors & creditors ageing",
             exact: true,
         }),
     ).toBeVisible();
@@ -746,14 +746,12 @@ test("customer directory supports viewing, editing and confirming deletion and d
         .locator("summary")
         .filter({ hasText: "+ Create customer" })
         .click();
-    const create = page
-        .locator("form")
-        .filter({
-            has: page.getByRole("heading", {
-                name: "Create customer",
-                exact: true,
-            }),
-        });
+    const create = page.locator("form").filter({
+        has: page.getByRole("heading", {
+            name: "Create customer",
+            exact: true,
+        }),
+    });
     await create
         .getByLabel("Customer name", { exact: true })
         .fill("Hande High Scool");

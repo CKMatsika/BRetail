@@ -1,3 +1,4 @@
+import { AgingReport, AgingSnapshot } from "../components/ReportViews";
 import React, { useState } from "react";
 import axios from "axios";
 import "./Trade.css";
@@ -89,7 +90,7 @@ export type TradeData = {
         selling_price: string;
     }[];
     cash_accounts: { id: number; code: string; name: string }[];
-    report: {
+    report: Partial<AgingSnapshot> & {
         aging: {
             id: number;
             number: string;
@@ -249,7 +250,6 @@ function TradeForm({
         </form>
     );
 }
-
 function Form(props: Parameters<typeof TradeForm>[0]) {
     const creation =
         props.title.startsWith("Create ") ||
@@ -267,7 +267,6 @@ function Form(props: Parameters<typeof TradeForm>[0]) {
         <TradeForm {...props} />
     );
 }
-
 type PreviewData = {
     items: Item[];
     net?: string;
@@ -411,7 +410,6 @@ export default function Trade({
         null,
     );
     const [deleting, setDeleting] = useState(false);
-
     const [search, setSearch] = useState("");
     const [documentStatus, setDocumentStatus] = useState("all");
     const [d, setD] = useState(initial),
@@ -2398,43 +2396,74 @@ export default function Trade({
                     </Form>
                 )}
                 {tab === "aging" && (
-                    <>
-                        <div className="trade-card trade-table">
-                            <h3>Outstanding balances and aging</h3>
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Document</th>
-                                        <th>Party</th>
-                                        <th>Due</th>
-                                        <th>Open</th>
-                                        <th>Age</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {d.report.aging.map((a) => (
-                                        <tr key={a.id}>
-                                            <td>{a.number}</td>
-                                            <td>{a.party_name}</td>
-                                            <td>{a.due_on}</td>
-                                            <td>{a.outstanding}</td>
-                                            <td>{a.bucket}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div className="trade-card">
-                            <h3>Control account reconciliation</h3>
-                            {d.report.controls.map((c) => (
-                                <p key={c.role + c.branch_id}>
-                                    {c.role} · Branch {c.branch_id} · Ledger{" "}
-                                    {c.ledger} · Party balances {c.subledger} ·
-                                    Unallocated {c.unallocated}
+                    <div className="trade-card">
+                        <div className="report-subheading">
+                            <div>
+                                <h3>Debtors & creditors ageing</h3>
+                                <p className="report-caption">
+                                    Current outstanding balances · {d.currency}{" "}
+                                    · {d.book} book
                                 </p>
-                            ))}
+                            </div>
+                            {can("reports.view") && (
+                                <a
+                                    className="secondary"
+                                    href="/reports?report=debtors"
+                                >
+                                    Open report centre
+                                </a>
+                            )}
                         </div>
-                    </>
+                        {d.report.parties ? (
+                            <>
+                                {d.sales && (
+                                    <section>
+                                        <h3>Debtors · customer balances</h3>
+                                        <AgingReport
+                                            data={d.report as AgingSnapshot}
+                                            role="receivable"
+                                            currency={d.currency}
+                                        />
+                                    </section>
+                                )}
+                                {d.purchasing && (
+                                    <section style={{ marginTop: 32 }}>
+                                        <h3>Creditors · supplier balances</h3>
+                                        <AgingReport
+                                            data={d.report as AgingSnapshot}
+                                            role="payable"
+                                            currency={d.currency}
+                                        />
+                                    </section>
+                                )}
+                            </>
+                        ) : (
+                            <div className="trade-table">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Document</th>
+                                            <th>Party</th>
+                                            <th>Due</th>
+                                            <th>Outstanding</th>
+                                            <th>Age</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {d.report.aging.map((a) => (
+                                            <tr key={a.id}>
+                                                <td>{a.number}</td>
+                                                <td>{a.party_name}</td>
+                                                <td>{a.due_on}</td>
+                                                <td>{a.outstanding}</td>
+                                                <td>{a.bucket}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
                 )}
                 {tab === "openings" && (
                     <>

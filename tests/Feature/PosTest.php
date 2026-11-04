@@ -13,6 +13,7 @@ use App\Models\StockBalance;
 use App\Models\TenantModule;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\AccountingLedger;
 use App\Services\Catalog;
 use App\Services\Onboarding;
 use App\Services\PosAccess;
@@ -22,6 +23,7 @@ use App\Services\PosHolds;
 use App\Services\PosReturns;
 use App\Services\PosSales;
 use App\Services\PosShifts;
+use App\Services\ReportsAnalytics;
 use App\Services\StockLedger;
 use App\Services\TenantContext;
 use Illuminate\Database\QueryException;
@@ -360,5 +362,20 @@ class PosTest extends TestCase
     {
         $this->actingAs($this->owner)->postJson('/api/v1/inventory/movements', ['request_id' => (string) Str::uuid(), 'warehouse_id' => $this->warehouse->id, 'type' => 'sale', 'reference' => 'NO', 'reason' => 'Bypass attempt', 'lines' => [['variant_id' => $this->variant->id, 'quantity' => '-1']]])->assertUnprocessable();
         $this->postJson('/api/v1/inventory/movements', ['request_id' => (string) Str::uuid(), 'warehouse_id' => $this->warehouse->id, 'type' => 'adjustment', 'reference' => 'NO', 'reason' => 'Bypass attempt', 'lines' => [['variant_id' => $this->variant->id, 'quantity' => '1', 'unit_cost' => '10', 'value_override' => '999']]])->assertUnprocessable();
+    }
+
+    public function test_analytics_net_tax_deducts_refund_tax_in_the_reporting_period(): void
+    {
+        $company = Company::firstOrFail();
+        $company->update(['settings' => [...$company->settings, 'tax_rate' => '15']]);
+        $sale = $this->sale('2');
+        app(PosReturns::class)->post($this->owner, $sale, $this->refundPayload($sale));
+        $today = AccountingLedger::today();
+        $report = app(ReportsAnalytics::class)->run($this->owner, ['from' => $today, 'to' => $today, 'book' => 'training']);
+        $this->assertSame('46.00', $report['currency_totals'][0]['sales']);
+        $this->assertSame('23.00', $report['currency_totals'][0]['refunds']);
+        $this->assertSame('23.00', $report['currency_totals'][0]['net']);
+        $this->assertSame('3.00', $report['currency_totals'][0]['tax']);
+        $this->assertNull($report['business']['sales']);
     }
 }

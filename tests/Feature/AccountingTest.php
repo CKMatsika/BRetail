@@ -59,6 +59,7 @@ class AccountingTest extends TestCase
     {
         $u = app(Onboarding::class)->register(['name' => 'Owner', 'email' => $email, 'password' => 'SecurePassword123', 'company_name' => 'Finance shop', 'industry' => 'general', 'base_currency' => 'USD', 'branch_name' => 'Main', 'branch_code' => 'MAIN', 'warehouse_name' => 'Main warehouse', 'tax_rate' => '15']);
         TenantModule::whereIn('key', ['inventory', 'pos', 'accounting'])->update(['enabled' => true]);
+        DB::table('tenant_subscriptions')->where('tenant_id', $u->tenant_id)->update(['status' => 'active']);
 
         return $u;
     }

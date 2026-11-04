@@ -14,7 +14,6 @@ use App\Models\TradeDocument;
 use App\Models\User;
 use App\Models\Warehouse;
 use Brick\Math\BigDecimal;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -23,7 +22,7 @@ final class TradeLedger
 {
     public function assertBranchClosable(int $branch): void
     {
-        app(\App\Services\PhaseSixAccess::class)->branchClosable($branch);
+        app(PhaseSixAccess::class)->branchClosable($branch);
         $warehouses = Warehouse::where('branch_id', $branch)->pluck('id');
         if (PurchaseOrder::whereIn('warehouse_id', $warehouses)->whereIn('status', ['draft', 'approved', 'partially_received'])->exists()) {
             self::fail('Finish or cancel purchase orders before deactivating this branch.');
@@ -68,7 +67,7 @@ final class TradeLedger
             self::fail('Request ID was already used with different data.');
         }
 
-return $old;
+        return $old;
     }
 
     public function date(string $date): void
@@ -133,8 +132,10 @@ return $old;
             $target = TradeDocument::findOrFail($id);
             $purchase = in_array($target->kind, ['bill', 'opening_payable'], true);
             $this->lock($u, $purchase ? 'purchasing.pay' : 'sales.receive');
-             $target->refresh();
-            if (isset($input['foreign_account_id'])) return app(ForeignTradeSettlement::class)->settle($u,$target,$input);
+            $target->refresh();
+            if (isset($input['foreign_account_id'])) {
+                return app(ForeignTradeSettlement::class)->settle($u, $target, $input);
+            }
             if (! in_array($target->kind, ['bill', 'invoice', 'opening_payable', 'opening_receivable'], true)) {
                 self::fail('Choose a supplier bill or customer invoice.');
             }InventoryAccess::warehouse($u, $target->warehouse_id);
@@ -145,7 +146,9 @@ return $old;
             }
             if ($d['date'] < $target->date || $target->book !== AccountingAccess::book()) {
                 self::fail('Settlement must follow the original document in its operating book.');
-            }if($target->currency_snapshot)self::fail('Settle foreign-denominated documents in their original currency.');
+            }if ($target->currency_snapshot) {
+                self::fail('Settle foreign-denominated documents in their original currency.');
+            }
             $amount = BigDecimal::of($d['amount']);
             if (! $amount->isPositive() || $amount->isGreaterThan($this->outstanding($target))) {
                 self::fail('Settlement exceeds the outstanding amount.');
@@ -197,38 +200,6 @@ return $old;
 
     public function report(User $u): array
     {
-        return DB::transaction(function () use ($u) {
-            AccountingAccess::lock($u);
-            $rows = [];
-            $book = AccountingAccess::book();
-            $allowed = [];
-            if ($u->canDo('purchasing.view') && TenantModule::where('key', 'purchasing')->where('enabled', true)->exists()) {
-                $allowed = [...$allowed, 'bill', 'opening_payable'];
-            }if ($u->canDo('sales.view') && TenantModule::where('key', 'sales')->where('enabled', true)->exists()) {
-                $allowed = [...$allowed, 'invoice', 'opening_receivable'];
-            }abort_unless($allowed, 403);
-            $ids = AccountingAccess::branches($u)->pluck('id');
-            $warehouses = Warehouse::whereIn('branch_id', $ids)->pluck('id');
-            foreach (TradeDocument::current()->where('book', $book)->whereIn('kind', $allowed)->whereIn('warehouse_id', $warehouses)->get() as $d) {
-                $out = $this->outstanding($d);
-                $days = max(0, (int) CarbonImmutable::parse($d->due_on)->diffInDays(CarbonImmutable::parse(AccountingLedger::today()), false));
-                $rows[] = [...$d->only('id', 'number', 'kind', 'party_name', 'date', 'due_on', 'total', 'warehouse_id'), 'number' => $d->display_number, 'outstanding' => $out, 'days_overdue' => $days, 'bucket' => $days === 0 ? 'current' : ($days <= 30 ? '1–30' : ($days <= 60 ? '31–60' : ($days <= 90 ? '61–90' : '90+')))];
-            }$controls = [];
-            $l = app(AccountingLedger::class);
-            foreach (['payable' => ['bill', 'opening_payable'], 'receivable' => ['invoice', 'opening_receivable']] as $role => $kinds) {
-                if (! array_intersect($kinds, $allowed)) {
-                    continue;
-                }foreach ($ids as $branch) {
-                    $ledger = BigDecimal::of($l->balance($l->account($role)->id, $book, $branch));
-                    if ($role === 'payable') {
-                        $ledger = $ledger->negated();
-                    }$wids = Warehouse::where('branch_id', $branch)->pluck('id');
-                    $sub = PosMath::sum(array_column(array_values(array_filter($rows,fn ($r) => in_array($r['kind'],$kinds,true) && $wids->contains($r['warehouse_id']))),'outstanding'),4);
-                    $controls[] = ['role' => $role, 'branch_id' => $branch, 'ledger' => (string) $ledger->toScale(4), 'subledger' => $sub, 'unallocated' => (string) $ledger->minus($sub)->toScale(4)];
-                }
-            }
-
-return ['book' => $book, 'date' => AccountingLedger::today(), 'aging' => $rows, 'controls' => $controls];
-        });
+        return app(TradeAging::class)->run($u);
     }
 }

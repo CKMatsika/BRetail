@@ -3,27 +3,38 @@
 namespace App\Services;
 
 use App\Models\AccountingSetting;
-use App\Models\Branch;
+use App\Models\Company;
 use App\Models\PosReturn;
 use App\Models\PosSale;
+use App\Models\Tenant;
 use App\Models\TenantModule;
 use App\Models\User;
 use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 final class ReportsAnalytics
 {
     public function run(User $user, array $input): array
+    {
+        return DB::transaction(function () use ($user, $input) {
+            Tenant::whereKey(app(TenantContext::class)->requireId())->lockForUpdate()->firstOrFail();
+
+            return $this->snapshot($user, $input);
+        });
+    }
+
+    private function snapshot(User $user, array $input): array
     {
         abort_unless($user->canDo('reports.view'), 403);
         $timezone = config('pos.report_timezone');
         $today = CarbonImmutable::now($timezone)->format('Y-m-d');
         $data = Validator::make($input, [
             'from' => ['nullable', 'date_format:Y-m-d'],
-            'to' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.$today],
             'branch_id' => ['nullable', 'integer'],
             'book' => ['nullable', Rule::in(['training', 'live'])],
         ])->validate();
@@ -31,7 +42,6 @@ final class ReportsAnalytics
         $to = $data['to'] ?? $today;
         abort_if($to < $from, 422, 'The end date must be on or after the start date.');
         abort_if(CarbonImmutable::parse($from, $timezone)->diffInDays(CarbonImmutable::parse($to, $timezone)) > 366, 422, 'Choose a date range of one year or less.');
-
         $branches = AccountingAccess::branches($user);
         if (! empty($data['branch_id'])) {
             AccountingAccess::branch($user, (int) $data['branch_id']);
@@ -43,7 +53,6 @@ final class ReportsAnalytics
         $book = $data['book'] ?? (AccountingSetting::first()?->live_enabled ? 'live' : 'training');
         $start = CarbonImmutable::parse($from, $timezone)->startOfDay()->utc();
         $end = CarbonImmutable::parse($to, $timezone)->addDay()->startOfDay()->utc();
-
         $salesByCurrency = [];
         $daily = [];
         $salesCount = 0;
@@ -70,6 +79,7 @@ final class ReportsAnalytics
                 $currency = $return->currency;
                 $salesByCurrency[$currency] ??= ['currency' => $currency, 'sales' => BigDecimal::zero(), 'refunds' => BigDecimal::zero(), 'net' => '0.00', 'tax' => BigDecimal::zero(), 'count' => 0];
                 $salesByCurrency[$currency]['refunds'] = $salesByCurrency[$currency]['refunds']->plus($return->total);
+                $salesByCurrency[$currency]['tax'] = $salesByCurrency[$currency]['tax']->minus($return->tax);
             }
         }
         foreach ($salesByCurrency as &$row) {
@@ -79,7 +89,6 @@ final class ReportsAnalytics
             $row['tax'] = (string) $row['tax']->toScale(2);
         }
         unset($row);
-
         $inventoryEnabled = TenantModule::where('key', 'inventory')->where('enabled', true)->exists();
         $inventory = ['variant_count' => 0, 'quantity' => '0.000', 'value' => '0.00', 'low_stock_count' => 0, 'low_stock' => []];
         if ($inventoryEnabled && $warehouseIds->isNotEmpty()) {
@@ -97,12 +106,11 @@ final class ReportsAnalytics
                 $totalValue = $totalValue->plus($balance->value);
             }
             $inventory['quantity'] = (string) $totalQuantity->toScale(3);
-            $inventory['value'] = (string) $totalValue->toScale(2);
+            $inventory['value'] = (string) $totalValue->toScale(2, RoundingMode::HalfUp);
             $inventory['low_stock'] = $stock->filter(fn ($item) => (float) $item->reorder_level > 0 && (float) $item->quantity <= (float) $item->reorder_level)
                 ->sortBy('quantity')->take(10)->map(fn ($item) => ['name' => $item->name, 'sku' => $item->sku, 'quantity' => (string) BigDecimal::of($item->quantity)->toScale(3), 'reorder_level' => (string) BigDecimal::of($item->reorder_level)->toScale(3)])->values()->all();
             $inventory['low_stock_count'] = $stock->filter(fn ($item) => (float) $item->reorder_level > 0 && (float) $item->quantity <= (float) $item->reorder_level)->count();
         }
-
         $topItems = [];
         if ($salesEnabled && $warehouseIds->isNotEmpty()) {
             $topItems = DB::table('pos_sale_items')->join('pos_sales', function ($join) {
@@ -114,12 +122,10 @@ final class ReportsAnalytics
                 ->groupBy('pos_sale_items.description', 'pos_sale_items.sku')->orderByDesc('quantity')->limit(8)->get()
                 ->map(fn ($item) => ['name' => $item->description, 'sku' => $item->sku, 'quantity' => (string) BigDecimal::of($item->quantity)->toScale(3)])->all();
         }
-
         $accounting = null;
-        if (AccountingSetting::exists() && $user->canDo('accounting.view')) {
+        if (AccountingSetting::exists() && $user->canDo('accounting.view') && TenantModule::where('key', 'accounting')->where('enabled', true)->exists()) {
             $accounting = app(AccountingReports::class)->run($user, ['book' => $book, 'from' => $from, 'to' => $to, 'branch_id' => $data['branch_id'] ?? null]);
         }
-
         $days = [];
         for ($day = CarbonImmutable::parse($from, $timezone); $day->format('Y-m-d') <= $to; $day = $day->addDay()) {
             $key = $day->format('Y-m-d');
@@ -128,14 +134,17 @@ final class ReportsAnalytics
 
         return [
             'filters' => ['from' => $from, 'to' => $to, 'branch_id' => $data['branch_id'] ?? null, 'book' => $book],
-            'branches' => $branchRows->map(fn ($branch) => ['id' => $branch->id, 'name' => $branch->name])->all(),
+            'branches' => AccountingAccess::branches($user)->orderBy('name')->get(['id', 'name'])->map(fn ($branch) => ['id' => $branch->id, 'name' => $branch->name])->all(),
             'currency_totals' => array_values($salesByCurrency),
             'sales_count' => $salesCount,
             'daily_sales' => $days,
             'top_items' => $topItems,
             'inventory' => $inventory,
-            'accounting' => $accounting ? ['profit_loss' => $accounting['profit_loss'], 'cash_flow' => $accounting['cash_flow'], 'balance_sheet' => $accounting['balance_sheet']] : null,
-            'base_currency' => AccountingSetting::first()?->currency,
+            'accounting' => $accounting,
+            'business' => app(BusinessReports::class)->run($user, ['from' => $from, 'to' => $to, 'book' => $book, 'branch_id' => $data['branch_id'] ?? null]),
+            'company_name' => Company::first()?->name,
+            'generated_at' => now()->toIso8601String(),
+            'base_currency' => AccountingSetting::first()?->currency ?? Company::first()?->base_currency,
             'timezone' => $timezone,
         ];
     }
