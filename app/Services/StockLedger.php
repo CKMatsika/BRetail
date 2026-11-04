@@ -46,6 +46,16 @@ final class StockLedger
         return $this->write($user, $input, $operation);
     }
 
+    public function invoiceAmendmentSale(User $user, array $input): StockDocument
+    {
+        return $this->write($user, $input, 'invoice_amendment_sale');
+    }
+
+    public function invoiceAmendmentReturn(User $user, array $input): StockDocument
+    {
+        return $this->write($user, $input, 'invoice_amendment_return');
+    }
+
     public function transfer(User $user, array $input): StockDocument
     {
         return $this->write($user, $input, match ($input['type'] ?? '') {
@@ -56,19 +66,19 @@ final class StockLedger
     private function write(User $user, array $input, string $operation): StockDocument
     {
         InventoryAccess::permit($user, match ($operation) {
-            'transfer_dispatch' => 'transfers.dispatch', 'transfer_receive' => 'transfers.receive', 'count' => 'inventory.count','sale' => 'pos.sell','return' => 'pos.refund','purchase' => 'accounting.purchase','trade_receive' => 'purchasing.receive','trade_sale' => 'sales.invoice','trade_return' => 'sales.return',default => 'inventory.adjust'
+            'transfer_dispatch' => 'transfers.dispatch', 'transfer_receive' => 'transfers.receive', 'count' => 'inventory.count','sale' => 'pos.sell','return' => 'pos.refund','purchase' => 'accounting.purchase','trade_receive' => 'purchasing.receive','trade_sale' => 'sales.invoice','trade_return' => 'sales.return','invoice_amendment_sale' => 'sales.invoice','invoice_amendment_return' => 'sales.invoice',default => 'inventory.adjust'
         });
         $types = match ($operation) {
-            'transfer_dispatch' => ['transfer_dispatch'], 'transfer_receive' => ['transfer_receive'], 'count' => ['count'],'sale' => ['sale'],'return' => ['customer_return'],'purchase' => ['purchase'],'trade_receive' => ['goods_receipt'],'trade_sale' => ['credit_sale'],'trade_return' => ['credit_return'],default => ['opening', 'adjustment']
+            'transfer_dispatch' => ['transfer_dispatch'], 'transfer_receive' => ['transfer_receive'], 'count' => ['count'],'sale' => ['sale'],'return' => ['customer_return'],'purchase' => ['purchase'],'trade_receive' => ['goods_receipt'],'trade_sale' => ['credit_sale'],'trade_return' => ['credit_return'],'invoice_amendment_sale' => ['credit_sale'],'invoice_amendment_return' => ['credit_return'],default => ['opening', 'adjustment']
         };
         if (in_array($operation, ['sale', 'return'], true)) {
             app(PosAccountingGate::class)->mode();
         }
-        $d = Validator::make($input, ['request_id' => 'required|uuid', 'warehouse_id' => 'required|integer', 'type' => ['required', Rule::in($types)], 'reference' => 'required|string|max:160', 'reason' => 'required|string|max:2000', 'lines' => 'required|array|min:1|max:2000', 'lines.*.variant_id' => 'required|integer|distinct', 'lines.*.quantity' => ['required', 'string', 'regex:/^-?\d{1,9}(\.\d{1,3})?$/'], 'lines.*.unit_cost' => ['nullable', 'string', Catalog::MONEY], 'lines.*.value_override' => in_array($operation, ['return', 'trade_return', 'transfer_receive'], true) ? ['required', 'string', 'regex:/^\d{1,20}(\.\d{1,4})?$/'] : ['prohibited']])->validate();
+        $d = Validator::make($input, ['request_id' => 'required|uuid', 'warehouse_id' => 'required|integer', 'type' => ['required', Rule::in($types)], 'reference' => 'required|string|max:160', 'reason' => 'required|string|max:2000', 'lines' => 'required|array|min:1|max:2000', 'lines.*.variant_id' => 'required|integer|distinct', 'lines.*.quantity' => ['required', 'string', 'regex:/^-?\d{1,9}(\.\d{1,3})?$/'], 'lines.*.unit_cost' => ['nullable', 'string', Catalog::MONEY], 'lines.*.value_override' => in_array($operation, ['return', 'trade_return', 'invoice_amendment_return', 'invoice_amendment_sale', 'transfer_receive'], true) ? ['required', 'string', 'regex:/^\d{1,20}(\.\d{1,4})?$/'] : ['prohibited']])->validate();
         usort($d['lines'], fn ($a, $b) => $a['variant_id'] <=> $b['variant_id']);
         // Normalize decimal representations before hashing a retry payload.
         $canonical = ['warehouse_id' => (int) $d['warehouse_id'], 'type' => $d['type'], 'reference' => $d['reference'], 'reason' => $d['reason'], 'lines' => array_map(fn ($l) => ['variant_id' => (int) $l['variant_id'], 'quantity' => (string) BigDecimal::of($l['quantity'])->toScale(3), 'unit_cost' => isset($l['unit_cost']) ? (string) BigDecimal::of($l['unit_cost'])->toScale(4) : null], $d['lines'])];
-        if (in_array($operation, ['return', 'trade_return', 'transfer_receive'], true)) {
+        if (in_array($operation, ['return', 'trade_return', 'invoice_amendment_return', 'invoice_amendment_sale', 'transfer_receive'], true)) {
             foreach ($canonical['lines'] as $i => &$line) {
                 $line['value_override'] = (string) BigDecimal::of($d['lines'][$i]['value_override'])->toScale(4);
             }
@@ -94,16 +104,16 @@ final class StockLedger
             $document = StockDocument::create(['request_id' => $d['request_id'], 'payload_hash' => $hash, 'type' => $d['type'], 'warehouse_id' => $d['warehouse_id'], 'actor_id' => $user->id, 'reference' => $d['reference'], 'reason' => $d['reason'], 'created_at' => now()]);
             foreach ($canonical['lines'] as $line) {
                 $variant = ProductVariant::with('product')->findOrFail($line['variant_id']);
-                abort_unless(in_array($operation, ['return', 'trade_return', 'transfer_receive'], true) || ($variant->active && $variant->product->active), 422, 'Inactive products cannot receive stock operations.');
+                abort_unless(in_array($operation, ['return', 'trade_return', 'invoice_amendment_return', 'transfer_receive'], true) || ($variant->active && $variant->product->active), 422, 'Inactive products cannot receive stock operations.');
                 $quantity = BigDecimal::of($line['quantity']);
-                if ((in_array($operation, ['sale', 'trade_sale', 'transfer_dispatch'], true) && ! $quantity->isNegative()) || (in_array($operation, ['return', 'purchase', 'trade_receive', 'trade_return', 'transfer_receive'], true) && ! $quantity->isPositive())) {
+                if ((in_array($operation, ['sale', 'trade_sale', 'invoice_amendment_sale', 'transfer_dispatch'], true) && ! $quantity->isNegative()) || (in_array($operation, ['return', 'purchase', 'trade_receive', 'trade_return', 'invoice_amendment_return', 'transfer_receive'], true) && ! $quantity->isPositive())) {
                     throw ValidationException::withMessages(['lines' => 'Invalid stock direction for this POS operation.']);
                 }
                 if ($quantity->isZero()) {
                     throw ValidationException::withMessages(['lines' => 'Movement quantities must be nonzero.']);
                 }
                 if ($variant->product->item_type === 'service') {
-                    if (! in_array($operation, ['sale', 'return', 'trade_sale', 'trade_return'], true)) {
+                    if (! in_array($operation, ['sale', 'return', 'trade_sale', 'trade_return', 'invoice_amendment_return', 'invoice_amendment_sale'], true)) {
                         throw ValidationException::withMessages(['lines' => 'Services do not hold stock. Use a physical stock item for receipts, adjustments and transfers.']);
                     }
                     continue;
@@ -124,12 +134,19 @@ final class StockLedger
                     }
                     $cost = BigDecimal::of($line['unit_cost']);
                     $value = $quantity->multipliedBy($cost)->toScale(4, RoundingMode::HalfUp);
-                    if (in_array($operation, ['return', 'trade_return', 'transfer_receive'], true)) {
+                    if (in_array($operation, ['return', 'trade_return', 'invoice_amendment_return', 'invoice_amendment_sale', 'transfer_receive'], true)) {
                         $value = BigDecimal::of($line['value_override']);
                     }
                 } else {
                     $cost = $oldValue->dividedBy($oldQty, 4, RoundingMode::HalfUp);
                     $value = $newQty->isZero() ? $oldValue->negated() : $oldValue->multipliedBy($quantity)->dividedBy($oldQty, 4, RoundingMode::HalfUp);
+                }
+                if ($operation === 'invoice_amendment_sale') {
+                    $value = BigDecimal::of($line['value_override'])->negated();
+                    if ($oldValue->plus($value)->isNegative() || ($newQty->isZero() && ! $oldValue->plus($value)->isZero())) {
+                        throw ValidationException::withMessages(['lines' => 'Invoice edit inventory cost does not reconcile.']);
+                    }
+                    $cost = $value->abs()->dividedBy($quantity->abs(), 4, RoundingMode::HalfUp);
                 }
                 $newValue = $oldValue->plus($value)->toScale(4);
                 $average = $newQty->isZero() ? BigDecimal::of('0.0000') : $newValue->dividedBy($newQty, 4, RoundingMode::HalfUp);

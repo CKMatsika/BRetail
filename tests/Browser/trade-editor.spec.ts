@@ -114,13 +114,15 @@ test("quote editor previews inclusive VAT, saves a revision and previews the inv
             ...original,
             id: 2,
             parent_id: 1,
-            number: "QUOTE-000002",
+            number: original.number,
+            has_history: true,
+            version: 2,
             net: "100.00",
             tax: "15.00",
             total: "115.00",
             items: [row],
         };
-        data.documents = [revision, { ...original, quote_closed: true }];
+        data.documents = [revision];
         return route.fulfill({ json: { data: revision } });
     });
     const errors: string[] = [];
@@ -151,7 +153,7 @@ test("quote editor previews inclusive VAT, saves a revision and previews the inv
         .click();
     await expect(preview).toBeVisible();
     await page
-        .getByRole("button", { name: "Save revised quotation", exact: true })
+        .getByRole("button", { name: "Save quotation changes", exact: true })
         .click();
     await expect(
         page.getByText("Quotation saved successfully.", { exact: true }),
@@ -163,7 +165,7 @@ test("quote editor previews inclusive VAT, saves a revision and previews the inv
         .getByRole("button", { name: "Accept and invoice", exact: true })
         .click();
     const invoice = page.getByRole("region", {
-        name: "Invoice preview | QUOTE-000002",
+        name: "Invoice preview | QUOTE-000001",
         exact: true,
     });
     await expect(invoice).toContainText("Total: USD 115.00");
@@ -318,10 +320,10 @@ test("customer workspace keeps documents together and receives payment against t
     await expect(page.getByText("QT-102", { exact: true })).toHaveCount(0);
     await expect(page.getByLabel("Customer", { exact: true })).toHaveValue("1");
     await page.getByLabel("Customer workspace").selectOption("2");
-    await expect(page.getByLabel("Customer", {exact:true})).toHaveValue("2");
-    await expect(page.getByText("QT-101", {exact:true})).toHaveCount(0);
+    await expect(page.getByLabel("Customer", { exact: true })).toHaveValue("2");
+    await expect(page.getByText("QT-101", { exact: true })).toHaveCount(0);
     await page.getByLabel("Customer workspace").selectOption("1");
-    await expect(page.getByLabel("Customer", {exact:true})).toHaveValue("1");
+    await expect(page.getByLabel("Customer", { exact: true })).toHaveValue("1");
     await page
         .getByRole("button", { name: "Accept and invoice", exact: true })
         .click();
@@ -510,4 +512,149 @@ test("procurement follows approval, receipt, supplier invoice and payment within
         }),
     ).toBeVisible();
     await expect(page.getByLabel("Supplier workspace")).toHaveCount(0);
+});
+
+test("invoice editing saves under the same number without creating a quotation, with history and protected paid details", async ({
+    page,
+}, info) => {
+    const data = workspaceFixture();
+    const original = {
+        id: 301,
+        kind: "invoice",
+        number: "INV-301",
+        party_name: "Acacia Stores",
+        customer_id: 1,
+        warehouse_id: 1,
+        date: data.today,
+        due_on: "2026-12-04",
+        reference: "PO-SCHOOL",
+        notes: "Original",
+        net: "20",
+        tax: "0",
+        total: "20",
+        outstanding: "20",
+        invoice_editable: true,
+        items: [workspaceLine],
+    };
+    data.documents = [original];
+    const posted: string[] = [];
+    await page.route("**/workspace-test", (route) =>
+        route.fulfill({
+            contentType: "text/html",
+            body: `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{padding:20px;font-family:Arial;color:#243c32;background:#f6f8f6}*{box-sizing:border-box}${styles}</style><div id="root"></div><script>window.tradeSection='sales';window.tradeFixture=${JSON.stringify(data)}</script><script>${bundle.replaceAll("</script", "<\\/script")}</script>`,
+        }),
+    );
+    await page.route("**/trade/**", async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        if (path === "/trade/history/302")
+            return route.fulfill({
+                json: {
+                    data: [
+                        data.documents[0],
+                        { ...original, version: 1, superseded: true },
+                    ],
+                    details: [],
+                },
+            });
+        if (route.request().method() === "GET")
+            return route.fulfill({ json: { data } });
+        posted.push(path);
+        if (path === "/trade/invoice-edits/301") {
+            const body = route.request().postDataJSON();
+            expect(body.customer_id).toBe("1");
+            expect(body.items[0].unit_price).toBe("12");
+            data.documents = [
+                {
+                    ...original,
+                    id: 302,
+                    parent_id: 301,
+                    number: original.number,
+                    notes: "Amended",
+                    total: "24",
+                    outstanding: "24",
+                    version: 2,
+                    has_history: true,
+                    items: [{ ...workspaceLine, unit_price: "12" }],
+                },
+            ];
+        } else if (path === "/trade/invoice-details/302") {
+            data.documents[0] = {
+                ...data.documents[0],
+                reference: route.request().postDataJSON().reference,
+            };
+        } else if (path === "/trade/settlements/302") {
+            data.documents[0] = {
+                ...data.documents[0],
+                outstanding: "19",
+                invoice_editable: false,
+            };
+        } else throw new Error(`Unexpected action ${path}`);
+        return route.fulfill({ json: { data: {} } });
+    });
+    await page.goto("/workspace-test");
+    const tabs = page.getByRole("navigation", {
+        name: "Customers & sales documents",
+    });
+    await tabs.getByRole("button", { name: "Invoices", exact: true }).click();
+    await page
+        .getByRole("button", { name: "Edit invoice", exact: true })
+        .click();
+    await expect(
+        page.getByRole("heading", {
+            name: "Edit invoice INV-301",
+            exact: true,
+        }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Customer", { exact: true })).toBeDisabled();
+    await page.getByLabel("Unit price 1", { exact: true }).fill("12");
+    await page
+        .getByRole("button", { name: "Save invoice changes", exact: true })
+        .click();
+    await expect(
+        page.getByText("Invoice updated successfully.", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("INV-301", { exact: true })).toHaveCount(1);
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    const history = page.getByRole("region", { name: "Document history" });
+    await expect(history).toContainText("History · INV-301");
+    await expect(history).toContainText("Previous version");
+    await page.screenshot({
+        path: `test-results/invoice-history-${info.project.name}.png`,
+        fullPage: true,
+    });
+    await page
+        .getByRole("button", { name: "Close history", exact: true })
+        .click();
+    await page
+        .getByRole("button", { name: "Receive payment", exact: true })
+        .click();
+    await page.getByLabel("Reference", { exact: true }).fill("BANK-PAY");
+    await page.getByLabel("Payment amount", { exact: true }).fill("5");
+    await page
+        .getByRole("button", { name: "Post payment", exact: true })
+        .click();
+    await expect(
+        page.getByRole("button", { name: "Edit invoice", exact: true }),
+    ).toHaveCount(0);
+    await page
+        .getByRole("button", { name: "Edit reference / notes", exact: true })
+        .click();
+    await page
+        .getByLabel("Reference", { exact: true })
+        .fill("PO-SCHOOL-UPDATED");
+    await page
+        .getByRole("button", { name: "Save invoice details", exact: true })
+        .click();
+    await expect(
+        page.getByText("PO-SCHOOL-UPDATED", { exact: true }),
+    ).toBeVisible();
+    expect(posted).toEqual([
+        "/trade/invoice-edits/301",
+        "/trade/settlements/302",
+        "/trade/invoice-details/302",
+    ]);
+    await tabs.getByRole("button", { name: "Quotations", exact: true }).click();
+    await expect(
+        page.getByText("No quotations found", { exact: true }),
+    ).toBeVisible();
 });

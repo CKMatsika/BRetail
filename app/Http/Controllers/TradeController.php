@@ -49,9 +49,9 @@ final class TradeController
         }if ($sales) {
             $kinds = [...$kinds, 'quote', 'invoice', 'customer_receipt', 'credit_return', 'opening_receivable'];
         }$t = app(TradeLedger::class);
-        $documents = TradeDocument::whereIn('warehouse_id', $w->pluck('id'))->where('book', $book)->whereIn('kind', $kinds)->latest('id')->limit(200)->get();
+        $documents = TradeDocument::current()->whereIn('warehouse_id', $w->pluck('id'))->where('book', $book)->whereIn('kind', $kinds)->latest('id')->limit(200)->get();
         $closedQuotes = TradeDocument::whereIn('parent_id', $documents->where('kind', 'quote')->pluck('id'))->whereIn('kind', ['quote', 'invoice'])->pluck('parent_id')->flip();
-        $documents = $documents->map(fn ($d) => [...$d->toArray(), 'quote_closed' => $d->kind === 'quote' && $closedQuotes->has($d->id), 'original_outstanding' => $d->currency_snapshot && in_array($d->kind, ['invoice', 'bill']) ? app(TradeCurrency::class)->outstandingOriginal($d) : null, 'outstanding' => in_array($d->kind, ['bill', 'invoice', 'opening_payable', 'opening_receivable']) ? $t->outstanding($d) : null]);
+        $documents = $documents->map(fn ($d) => [...app(\App\Services\TradeDocuments::class)->present($d), 'quote_closed' => $d->kind === 'quote' && $closedQuotes->has($d->id), 'original_outstanding' => $d->currency_snapshot && in_array($d->kind, ['invoice', 'bill']) ? app(TradeCurrency::class)->outstandingOriginal($d) : null, 'outstanding' => in_array($d->kind, ['bill', 'invoice', 'opening_payable', 'opening_receivable']) ? $t->outstanding($d) : null]);
 
         return ['company_logo_url' => Company::firstOrFail()->logo_url, 'book' => $book, 'today' => AccountingLedger::today(), 'currencies' => TenantModule::where('key', 'currencies')->where('enabled', true)->exists() ? Currency::where('active', true)->get(['code', 'name']) : [], 'currency' => AccountingAccess::setting()->currency, 'purchasing' => $purchase, 'sales' => $sales, 'warehouses' => $w, 'suppliers' => $purchase ? Supplier::orderBy('name')->get() : [], 'customers' => $sales ? PosCustomer::orderBy('name')->get() : [], 'credits' => $sales && $r->user()->canDo('sales.configure') ? CustomerCredit::get() : [], 'orders' => $purchase ? PurchaseOrder::whereIn('warehouse_id', $w->pluck('id'))->where('book', $book)->latest('id')->limit(200)->get() : [], 'documents' => $documents, 'variants' => ProductVariant::with('product:id,name,item_type')->where('active', true)->get(['id', 'product_id', 'name', 'sku', 'selling_price']), 'foreign_accounts' => TenantModule::where('key', 'currencies')->where('enabled', true)->exists() && $r->user()->canDo('currencies.post') ? ForeignAccount::whereIn('branch_id', $w->pluck('branch_id'))->whereIn('kind', ['bank', 'safe', 'mobile'])->get()->map(fn ($a) => [...$a->only('id', 'branch_id', 'name'), 'currency' => Currency::findOrFail($a->currency_id)->code]) : [], 'cash_accounts' => ChartAccount::whereNotIn('id', ForeignAccount::select('account_id'))->where('active', true)->where('is_cash', true)->get(['id', 'code', 'name']), 'report' => $t->report($r->user())];
     }
@@ -77,10 +77,10 @@ final class TradeController
         $u = $r->user();
         $d = $r->all();
         $result = match ($action) {
-            'suppliers' => app(Suppliers::class)->save($u, $d, $id ? (int) $id : null),'orders' => app(PurchaseOrders::class)->create($u, $d),'approve','cancel' => app(PurchaseOrders::class)->transition($u, (int) $id, $action),'receipts' => app(TradePurchasing::class)->receive($u, (int) $id, $d),'bills' => app(TradePurchasing::class)->bill($u, (int) $id, $d),'customers' => $this->customer($r),'credits' => app(TradeLedger::class)->credit($u, $d),'quote-preview' => app(TradeSales::class)->quote($u, $d, $id ? (int) $id : null, true),'quotes' => app(TradeSales::class)->quote($u, $d, $id ? (int) $id : null),'invoices' => app(TradeSales::class)->invoice($u, (int) $id, $d),'settlements' => app(TradeLedger::class)->settle($u, (int) $id, $d),'returns' => app(TradeSales::class)->creditReturn($u, (int) $id, $d),'openings' => app(TradeLedger::class)->opening($u, $d),default => abort(404)
+            'suppliers' => app(Suppliers::class)->save($u, $d, $id ? (int) $id : null),'orders' => app(PurchaseOrders::class)->create($u, $d),'approve','cancel' => app(PurchaseOrders::class)->transition($u, (int) $id, $action),'receipts' => app(TradePurchasing::class)->receive($u, (int) $id, $d),'bills' => app(TradePurchasing::class)->bill($u, (int) $id, $d),'customers' => $this->customer($r),'credits' => app(TradeLedger::class)->credit($u, $d),'quote-preview' => app(TradeSales::class)->quote($u, $d, $id ? (int) $id : null, true),'quotes' => app(TradeSales::class)->quote($u, $d, $id ? (int) $id : null),'invoice-preview' => app(\App\Services\TradeInvoiceEdits::class)->amend($u, (int) $id, $d, true),'invoice-edits' => app(\App\Services\TradeInvoiceEdits::class)->amend($u, (int) $id, $d),'invoice-details' => app(\App\Services\TradeInvoiceEdits::class)->details($u, (int) $id, $d),'invoices' => app(TradeSales::class)->invoice($u, (int) $id, $d),'settlements' => app(TradeLedger::class)->settle($u, (int) $id, $d),'returns' => app(TradeSales::class)->creditReturn($u, (int) $id, $d),'openings' => app(TradeLedger::class)->opening($u, $d),default => abort(404)
         };
 
-        return ['data' => $result, 'message' => $action === 'quote-preview' ? 'Preview calculated.' : 'Saved successfully.'];
+        return ['data' => $result instanceof TradeDocument ? app(\App\Services\TradeDocuments::class)->present($result) : $result, 'message' => $action === 'quote-preview' ? 'Preview calculated.' : 'Saved successfully.'];
     }
 
     private function customer(Request $r): PosCustomer
@@ -95,6 +95,18 @@ final class TradeController
         });
     }
 
+    public function history(Request $r, string $id)
+    {
+        abort_unless($this->allowed($r, 'sales'), 403);
+        $doc = TradeDocument::whereIn('kind', ['quote', 'invoice'])->findOrFail($id);
+        $versions = $doc->versions();
+        foreach ($versions as $version) {
+            InventoryAccess::warehouse($r->user(), $version->warehouse_id);
+        }
+
+        return ['data' => array_map(fn ($version) => app(\App\Services\TradeDocuments::class)->present($version), $versions), 'details' => \App\Models\TradeDocumentDetail::where('document_id', $doc->id)->latest('id')->get(['reference', 'notes', 'created_at'])];
+    }
+
     public function print(Request $r, string $kind, string $id)
     {
         $doc = $kind === 'order' ? PurchaseOrder::findOrFail($id) : TradeDocument::findOrFail($id);
@@ -102,6 +114,6 @@ final class TradeController
         abort_unless($this->allowed($r, $purchase ? 'purchasing' : 'sales'), 403);
         AccountingAccess::branch($r->user(), Warehouse::findOrFail($doc->warehouse_id)->branch_id);
 
-        return view('trade.document', ['document' => $doc->toArray(), 'company' => Company::firstOrFail(), 'kind' => $kind === 'order' ? 'Purchase order' : str_replace('_', ' ', $doc->kind)]);
+        return view('trade.document', ['document' => $doc instanceof TradeDocument ? app(\App\Services\TradeDocuments::class)->present($doc) : $doc->toArray(), 'company' => Company::firstOrFail(), 'kind' => $kind === 'order' ? 'Purchase order' : str_replace('_', ' ', $doc->kind)]);
     }
 }

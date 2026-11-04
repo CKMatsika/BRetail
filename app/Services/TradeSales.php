@@ -19,11 +19,21 @@ final class TradeSales
 {
     public function quote(User $u, array $input, ?int $revises = null, bool $preview = false): TradeDocument|array
     {
+        return $this->prepareQuote($u, $input, $revises, $preview, 'sales.quote');
+    }
+
+    public function invoicePreview(User $u, array $input): array
+    {
+        return $this->prepareQuote($u, $input, null, true, 'sales.invoice');
+    }
+
+    private function prepareQuote(User $u, array $input, ?int $revises, bool $preview, string $permission): TradeDocument|array
+    {
         $d = Validator::make($input, ['prices_include_vat' => 'sometimes|boolean', 'currency' => 'nullable|string|size:3', 'request_id' => 'required|uuid', 'warehouse_id' => 'required|integer', 'customer_id' => 'required|integer', 'date' => 'required|date_format:Y-m-d', 'due_on' => 'required|date_format:Y-m-d|after_or_equal:date', 'reference' => 'required|string|max:100', 'notes' => 'nullable|string|max:2000', 'items' => 'required|array|min:1|max:500', 'items.*.variant_id' => 'required|integer|distinct', 'items.*.quantity' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,3})?$/'], 'items.*.unit_price' => ['required', 'string', Catalog::MONEY], 'items.*.discount_percent' => ['required', 'string', 'numeric', 'between:0,100', 'decimal:0,2']])->validate();
 
-        return DB::transaction(function () use ($u, $d, $revises, $preview) {
+        return DB::transaction(function () use ($u, $d, $revises, $preview, $permission) {
             $t = app(TradeLedger::class);
-            $t->lock($u, 'sales.quote');
+            $t->lock($u, $permission);
             InventoryAccess::warehouse($u, $d['warehouse_id']);
             $payload = $revises ? [...$d, 'revises' => $revises] : $d;
             if (! $preview && ($old = $t->existing($d['request_id'], $payload))) {
@@ -76,37 +86,46 @@ final class TradeSales
                 TradeLedger::fail('Quotation expired or belongs to a different operating book.');
             }if (TradeDocument::whereIn('kind', ['invoice', 'quote'])->where('parent_id', $q->id)->exists()) {
                 TradeLedger::fail('Quotation was already invoiced or revised. Open its latest version.');
-            }$profile = CustomerCredit::where('customer_id', $q->customer_id)->first();
-            if (! $profile || ! $profile->active) {
-                TradeLedger::fail('Configure and activate this customerâ€™s credit profile first.');
-            }$open = BigDecimal::zero();
-            foreach (TradeDocument::where('book', $q->book)->where('customer_id', $q->customer_id)->whereIn('kind', ['invoice', 'opening_receivable'])->get() as $doc) {
-                $due = $t->outstanding($doc);
-                $open = $open->plus($due);
-                if (BigDecimal::of($due)->isPositive() && $doc->due_on < max($d['date'], AccountingLedger::today())) {
-                    TradeLedger::fail('Customer has overdue invoices. Record their payment before extending credit.');
-                }
-            }if ($open->plus($q->total)->isGreaterThan($profile->credit_limit) || ! BigDecimal::of($q->total)->isPositive()) {
-                TradeLedger::fail('Invoice exceeds customer credit limit or has no positive total.');
             }
-            $ledger = app(AccountingLedger::class);
-            $sub = BigDecimal::zero();
-            foreach (TradeDocument::where('book', $q->book)->whereIn('kind', ['invoice', 'opening_receivable'])->get() as $entry) {
-                $sub = $sub->plus($t->outstanding($entry));
-            }if (! BigDecimal::of($ledger->balance($ledger->account('receivable')->id, $q->book))->minus($sub)->isZero()) {
-                TradeLedger::fail('Allocate existing receivable control balances to customers before extending credit.');
-            }
-            $stock = app(StockLedger::class)->trade($u, ['request_id' => $d['request_id'], 'warehouse_id' => $q->warehouse_id, 'type' => 'credit_sale', 'reference' => $q->number, 'reason' => 'Accepted credit quotation', 'lines' => array_map(fn ($i) => ['variant_id' => $i['variant_id'], 'quantity' => (string) BigDecimal::of($i['quantity'])->negated()], $q->items)]);
+            $profile = $this->assertCredit($q->customer_id, $d['date'], $q->total, $q->book);
+            $stock = app(StockLedger::class)->trade($u, ['request_id' => $d['request_id'], 'warehouse_id' => $q->warehouse_id, 'type' => 'credit_sale', 'reference' => $q->display_number, 'reason' => 'Accepted credit quotation', 'lines' => array_map(fn ($i) => ['variant_id' => $i['variant_id'], 'quantity' => (string) BigDecimal::of($i['quantity'])->negated()], $q->items)]);
             $costs = $stock->movements->keyBy('variant_id');
             $items = array_map(fn ($i) => [...$i, 'cost_value' => (string) BigDecimal::of($costs->get($i['variant_id'])?->value ?? '0')->negated()], $q->items);
             $due = CarbonImmutable::parse($d['date'])->addDays($profile->terms_days)->toDateString();
-            $doc = $t->document($u, 'invoice', ['request_id' => $d['request_id'], 'date' => $d['date'], 'due_on' => $due, 'reference' => $q->number, 'warehouse_id' => $q->warehouse_id, 'customer_id' => $q->customer_id, 'party_name' => $q->party_name, 'parent_id' => $q->id, 'currency_snapshot' => $q->currency_snapshot], $items, $q->net, $q->tax, $q->total, $payload);
+            $doc = $t->document($u, 'invoice', ['request_id' => $d['request_id'], 'date' => $d['date'], 'due_on' => $due, 'reference' => $q->display_number, 'warehouse_id' => $q->warehouse_id, 'customer_id' => $q->customer_id, 'party_name' => $q->party_name, 'parent_id' => $q->id, 'currency_snapshot' => $q->currency_snapshot], $items, $q->net, $q->tax, $q->total, $payload);
             $l = app(AccountingLedger::class);
             $cost = PosMath::sum(array_column($items, 'cost_value'), 4);
             $t->post($u, $doc, [$l->line('receivable', $q->total), $l->line('sales', '0', $q->net), $l->line('tax_payable', '0', $q->tax), $l->line('cogs', $cost), $l->line('inventory', '0', $cost)]);
 
             return $doc;
         }, 3);
+    }
+
+    public function assertCredit(int $customer, string $date, string $total, string $book): CustomerCredit
+    {
+        $t = app(TradeLedger::class);
+        $profile = CustomerCredit::where('customer_id', $customer)->first();
+        if (! $profile || ! $profile->active) {
+            TradeLedger::fail('Configure and activate this customer credit profile first.');
+        }$open = BigDecimal::zero();
+        foreach (TradeDocument::where('book', $book)->where('customer_id', $customer)->whereIn('kind', ['invoice', 'opening_receivable'])->get() as $doc) {
+            $due = $t->outstanding($doc);
+            $open = $open->plus($due);
+            if (BigDecimal::of($due)->isPositive() && $doc->due_on < max($date, AccountingLedger::today())) {
+                TradeLedger::fail('Customer has overdue invoices. Record their payment before extending credit.');
+            }
+        }if ($open->plus($total)->isGreaterThan($profile->credit_limit) || ! BigDecimal::of($total)->isPositive()) {
+            TradeLedger::fail('Invoice exceeds customer credit limit or has no positive total.');
+        }
+        $ledger = app(AccountingLedger::class);
+        $sub = BigDecimal::zero();
+        foreach (TradeDocument::where('book', $book)->whereIn('kind', ['invoice', 'opening_receivable'])->get() as $entry) {
+            $sub = $sub->plus($t->outstanding($entry));
+        }if (! BigDecimal::of($ledger->balance($ledger->account('receivable')->id, $book))->minus($sub)->isZero()) {
+            TradeLedger::fail('Allocate existing receivable control balances to customers before extending credit.');
+        }
+
+        return $profile;
     }
 
     public function creditReturn(User $u, int $id, array $input): TradeDocument

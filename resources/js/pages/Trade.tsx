@@ -18,6 +18,10 @@ type Item = {
     value?: string;
 };
 type Doc = {
+    invoice_editable?: boolean;
+    version?: number;
+    has_history?: boolean;
+    superseded?: boolean;
     supplier_id?: number;
     order_id?: number;
     customer_id?: number;
@@ -99,6 +103,7 @@ export type TradeData = {
     };
 };
 type F = {
+    disabled?: boolean;
     key: string;
     label: string;
     value?: string;
@@ -177,6 +182,7 @@ function TradeForm({
                         {f.options ? (
                             <select
                                 aria-label={f.label}
+                                disabled={f.disabled}
                                 value={v[f.key] || f.options?.[0]?.value || ""}
                                 onChange={(e) =>
                                     setV({ ...v, [f.key]: e.target.value })
@@ -401,6 +407,11 @@ export default function Trade({
         ),
         [notice, setNotice] = useState(""),
         [selected, setSelected] = useState<Doc | null>(null);
+    const [history, setHistory] = useState<{
+        number: string;
+        versions: Doc[];
+        details: { reference: string; notes?: string; created_at: string }[];
+    } | null>(null);
     const [preview, setPreview] = useState<PreviewData | null>(null);
     const [items, setItems] = useState<Item[]>([
         {
@@ -479,12 +490,18 @@ export default function Trade({
         supplier_payments: "Supplier payments",
         aging: "Aging & reconciliation",
         openings: "Opening balances",
+        invoice_edit: "Edit invoice",
+        invoice_details: "Edit invoice details",
     };
     const descriptions: Record<string, string> = {
         customers:
             "Select a customer to view their quotations, invoices, receipts and returns.",
         suppliers:
             "Select a supplier to view their purchase orders, deliveries, invoices and payments.",
+        invoice_edit:
+            "Update this unpaid invoice under the same number. Stock and accounting changes are applied together.",
+        invoice_details:
+            "Change reference or notes without affecting posted amounts, payments or stock.",
         quotes: "Prepare a quotation, confirm customer acceptance, then create the invoice.",
         invoices:
             "Create invoices from accepted quotations. Select an unpaid invoice to receive payment.",
@@ -503,6 +520,7 @@ export default function Trade({
             "Allocate verified opening balances to customers and suppliers.",
     };
     const navigate = (next: string) => {
+        setHistory(null);
         setTab(next);
         setSelected(null);
         setPreview(null);
@@ -848,25 +866,24 @@ export default function Trade({
             discount_percent: i.discount_percent,
         })),
     });
-    const editQuote = (q: Doc, copy = false) => {
+    const editQuote = (q: Doc) => {
+        setHistory(null);
         setPreview(null);
-        setSelected(
-            copy
-                ? {
-                      ...q,
-                      id: 0,
-                      reference: "",
-                      notes:
-                          "Correction for invoice " +
-                          q.number +
-                          ". The original invoice remains posted; reverse eligible unpaid items before posting a replacement.",
-                      date: d.today,
-                      due_on: d.today,
-                  }
-                : q,
-        );
+        setSelected(q);
         setItems(q.items.map((i) => ({ ...i, ...(i.original ?? {}) })));
-        setTab("quotes");
+        setTab(q.kind === "invoice" ? "invoice_edit" : "quotes");
+    };
+    const showHistory = async (doc: Doc) => {
+        try {
+            const response = await axios.get(`/trade/history/${doc.id}`);
+            setHistory({
+                number: doc.number,
+                versions: response.data.data,
+                details: response.data.details ?? [],
+            });
+        } catch (e) {
+            setNotice(error(e));
+        }
     };
     const quantities = () =>
         items
@@ -954,6 +971,13 @@ export default function Trade({
                                 >
                                     Print
                                 </a>
+                                {doc.has_history && (
+                                    <button
+                                        onClick={() => void showHistory(doc)}
+                                    >
+                                        History
+                                    </button>
+                                )}
                                 {buttons(doc)}
                             </td>
                         </tr>
@@ -1639,20 +1663,33 @@ export default function Trade({
                         )}
                     </>
                 )}
-                {tab === "quotes" && (
+                {(tab === "quotes" ||
+                    (tab === "invoice_edit" &&
+                        selected?.kind === "invoice")) && (
                     <>
-                        {can("sales.quote") && (
+                        {can(
+                            tab === "invoice_edit"
+                                ? "sales.invoice"
+                                : "sales.quote",
+                        ) && (
                             <Form
                                 key={"quote-" + (selected?.id ?? "new")}
                                 title={
                                     selected?.id
-                                        ? "Edit quotation " + selected.number
+                                        ? (tab === "invoice_edit"
+                                              ? "Edit invoice "
+                                              : "Edit quotation ") +
+                                          selected.number
                                         : "Create sales quotation"
                                 }
                                 fields={[
                                     {
                                         key: "currency",
-                                        label: "Quotation currency",
+                                        label:
+                                            tab === "invoice_edit"
+                                                ? "Invoice currency"
+                                                : "Quotation currency",
+                                        disabled: tab === "invoice_edit",
                                         value: selected?.currency_snapshot
                                             ?.currency,
                                         options: [
@@ -1675,6 +1712,7 @@ export default function Trade({
                                     {
                                         key: "customer_id",
                                         label: "Customer",
+                                        disabled: tab === "invoice_edit",
                                         value: selected?.customer_id
                                             ? String(selected.customer_id)
                                             : party || undefined,
@@ -1683,6 +1721,7 @@ export default function Trade({
                                     {
                                         key: "warehouse_id",
                                         label: "Selling warehouse",
+                                        disabled: tab === "invoice_edit",
                                         value: selected?.warehouse_id
                                             ? String(selected.warehouse_id)
                                             : undefined,
@@ -1692,19 +1731,27 @@ export default function Trade({
                                         ...f,
                                         value: selected
                                             ? f.key === "date"
-                                                ? selected.date
+                                                ? tab === "invoice_edit"
+                                                    ? d.today
+                                                    : selected.date
                                                 : (selected.reference ?? "")
                                             : f.value,
                                     })),
                                     {
                                         key: "due_on",
-                                        label: "Quote expiry",
+                                        label:
+                                            tab === "invoice_edit"
+                                                ? "Payment due"
+                                                : "Quote expiry",
                                         type: "date",
                                         value: selected?.due_on ?? d.today,
                                     },
                                     {
                                         key: "notes",
-                                        label: "Quote notes",
+                                        label:
+                                            tab === "invoice_edit"
+                                                ? "Invoice notes"
+                                                : "Quote notes",
                                         optional: true,
                                         value: selected?.notes ?? "",
                                     },
@@ -1732,7 +1779,9 @@ export default function Trade({
                                     setPreview(
                                         (
                                             await axios.post(
-                                                "/trade/quote-preview" +
+                                                (tab === "invoice_edit"
+                                                    ? "/trade/invoice-preview"
+                                                    : "/trade/quote-preview") +
                                                     (selected?.id
                                                         ? "/" + selected.id
                                                         : ""),
@@ -1743,7 +1792,9 @@ export default function Trade({
                                 }
                                 save={async (v, id) => {
                                     await post(
-                                        "quotes" +
+                                        (tab === "invoice_edit"
+                                            ? "invoice-edits"
+                                            : "quotes") +
                                             (selected?.id
                                                 ? "/" + selected.id
                                                 : ""),
@@ -1751,11 +1802,21 @@ export default function Trade({
                                     );
                                     setSelected(null);
                                     setPreview(null);
-                                    setNotice("Quotation saved successfully.");
+                                    if (tab === "invoice_edit") {
+                                        setTab("invoices");
+                                        setNotice(
+                                            "Invoice updated successfully.",
+                                        );
+                                    } else
+                                        setNotice(
+                                            "Quotation saved successfully.",
+                                        );
                                 }}
                                 button={
                                     selected?.id
-                                        ? "Save revised quotation"
+                                        ? tab === "invoice_edit"
+                                            ? "Save invoice changes"
+                                            : "Save quotation changes"
                                         : "Save quotation"
                                 }
                             >
@@ -1765,20 +1826,14 @@ export default function Trade({
                                     entered prices include VAT. Credit and
                                     available stock are checked when invoicing.
                                 </p>
-                                {selected?.id === 0 && (
+                                {selected && (
                                     <p>
-                                        This creates a new quotation. The
-                                        original invoice remains posted. Reverse
-                                        eligible unpaid items before posting a
-                                        replacement invoice to avoid duplicate
-                                        charges and stock deductions.
-                                    </p>
-                                )}
-                                {Boolean(selected?.id) && (
-                                    <p>
-                                        Saving creates a revision; the previous
-                                        version remains in history and cannot be
-                                        invoiced.
+                                        Saving keeps the same{" "}
+                                        {tab === "invoice_edit"
+                                            ? "invoice"
+                                            : "quotation"}{" "}
+                                        number. Earlier versions are retained in
+                                        History.
                                     </p>
                                 )}
                                 {lines("price")}
@@ -1794,8 +1849,11 @@ export default function Trade({
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setSelected(null);
-                                            setPreview(null);
+                                            navigate(
+                                                tab === "invoice_edit"
+                                                    ? "invoices"
+                                                    : "quotes",
+                                            );
                                         }}
                                     >
                                         Cancel editing
@@ -1803,33 +1861,37 @@ export default function Trade({
                                 )}
                             </Form>
                         )}
-                        {list(
-                            d.documents.filter((x) => x.kind === "quote"),
-                            (q) => (
-                                <>
-                                    {can("sales.quote") && !q.quote_closed && (
-                                        <button onClick={() => editQuote(q)}>
-                                            Edit quotation
-                                        </button>
-                                    )}
-                                    {q.quote_closed ? (
-                                        <span>Revised / invoiced</span>
-                                    ) : (
-                                        can("sales.invoice") && (
-                                            <button
-                                                onClick={() => {
-                                                    setSelected(q);
-                                                    setPreview(null);
-                                                    setTab("invoices");
-                                                }}
-                                            >
-                                                Accept and invoice
-                                            </button>
-                                        )
-                                    )}
-                                </>
-                            ),
-                        )}
+                        {tab === "quotes" &&
+                            list(
+                                d.documents.filter((x) => x.kind === "quote"),
+                                (q) => (
+                                    <>
+                                        {can("sales.quote") &&
+                                            !q.quote_closed && (
+                                                <button
+                                                    onClick={() => editQuote(q)}
+                                                >
+                                                    Edit quotation
+                                                </button>
+                                            )}
+                                        {q.quote_closed ? (
+                                            <span>Revised / invoiced</span>
+                                        ) : (
+                                            can("sales.invoice") && (
+                                                <button
+                                                    onClick={() => {
+                                                        setSelected(q);
+                                                        setPreview(null);
+                                                        setTab("invoices");
+                                                    }}
+                                                >
+                                                    Accept and invoice
+                                                </button>
+                                            )
+                                        )}
+                                    </>
+                                ),
+                            )}
                     </>
                 )}
                 {tab === "invoices" && (
@@ -1906,14 +1968,36 @@ export default function Trade({
                                             >
                                                 Preview invoice
                                             </button>
-                                            {can("sales.quote") && (
-                                                <button
-                                                    onClick={() =>
-                                                        editQuote(i, true)
-                                                    }
-                                                >
-                                                    Create corrected quote
-                                                </button>
+                                            {can("sales.invoice") && (
+                                                <>
+                                                    {i.invoice_editable ? (
+                                                        <button
+                                                            onClick={() =>
+                                                                editQuote(i)
+                                                            }
+                                                        >
+                                                            Edit invoice
+                                                        </button>
+                                                    ) : (
+                                                        <small>
+                                                            Payments or credit
+                                                            returns recorded.
+                                                            Use a credit note
+                                                            for amount changes.
+                                                        </small>
+                                                    )}
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelected(i);
+                                                            setPreview(null);
+                                                            setTab(
+                                                                "invoice_details",
+                                                            );
+                                                        }}
+                                                    >
+                                                        Edit reference / notes
+                                                    </button>
+                                                </>
                                             )}
                                         </>
                                     )}
@@ -1941,6 +2025,46 @@ export default function Trade({
                         )}
                     </>
                 )}
+                {tab === "invoice_details" &&
+                    selected &&
+                    can("sales.invoice") && (
+                        <Form
+                            key={selected.id}
+                            title={"Edit details for " + selected.number}
+                            fields={[
+                                {
+                                    key: "reference",
+                                    label: "Reference",
+                                    value: selected.reference ?? "",
+                                },
+                                {
+                                    key: "notes",
+                                    label: "Invoice notes",
+                                    value: selected.notes ?? "",
+                                    optional: true,
+                                },
+                            ]}
+                            save={async (v, id) => {
+                                await post(`invoice-details/${selected.id}`, {
+                                    ...v,
+                                    request_id: id,
+                                });
+                                setTab("invoices");
+                            }}
+                            button="Save invoice details"
+                        >
+                            <p>
+                                The invoice number, amounts, payment allocations
+                                and stock remain unchanged.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => navigate("invoices")}
+                            >
+                                Cancel editing
+                            </button>
+                        </Form>
+                    )}
                 {tab === "invoices" && preview && (
                     <>
                         <DocumentPreview
@@ -2218,6 +2342,73 @@ export default function Trade({
                     </>
                 )}
             </div>
+            {history && (
+                <section
+                    className="trade-card trade-table"
+                    aria-label="Document history"
+                >
+                    <h3>History · {history.number}</h3>
+                    <p>One document number. Earlier versions are read-only.</p>
+                    <button onClick={() => setHistory(null)}>
+                        Close history
+                    </button>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Version</th>
+                                <th>Date</th>
+                                <th>Reference / notes</th>
+                                <th>Total</th>
+                                <th>Status</th>
+                                <th>Document</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {history.versions.map((version, index) => (
+                                <tr key={version.id}>
+                                    <td>
+                                        {version.version ??
+                                            history.versions.length - index}
+                                    </td>
+                                    <td>{version.date}</td>
+                                    <td>
+                                        {version.reference}
+                                        <small>{version.notes}</small>
+                                    </td>
+                                    <td>
+                                        {d.currency} {version.total}
+                                    </td>
+                                    <td>
+                                        {version.superseded
+                                            ? "Previous version"
+                                            : "Current"}
+                                    </td>
+                                    <td>
+                                        <a
+                                            href={`/trade/print/document/${version.id}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                        >
+                                            Print version
+                                        </a>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {history.details.length > 0 && (
+                        <>
+                            <h3>Reference and note changes</h3>
+                            {history.details.map((detail, index) => (
+                                <p key={index}>
+                                    {detail.created_at} · {detail.reference} ·{" "}
+                                    {detail.notes}
+                                </p>
+                            ))}
+                        </>
+                    )}
+                </section>
+            )}
         </div>
     );
 }

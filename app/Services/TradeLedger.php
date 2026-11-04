@@ -89,7 +89,7 @@ return $old;
 
     public function post(User $u, TradeDocument $d, array $lines, string $cashflow = 'none'): void
     {
-        app(AccountingLedger::class)->system($u, ['book' => $d->book, 'branch_id' => Warehouse::findOrFail($d->warehouse_id)->branch_id, 'date' => $d->date, 'reference' => $d->number, 'description' => $d->kind.' '.$d->party_name, 'source_type' => 'trade_'.$d->kind, 'source_id' => (string) $d->id, 'cashflow' => $cashflow, 'lines' => $lines]);
+        app(AccountingLedger::class)->system($u, ['book' => $d->book, 'branch_id' => Warehouse::findOrFail($d->warehouse_id)->branch_id, 'date' => $d->date, 'reference' => $d->kind === 'invoice_reversal' ? $d->reference : $d->display_number, 'description' => $d->kind.' '.$d->party_name, 'source_type' => 'trade_'.$d->kind, 'source_id' => (string) $d->id, 'cashflow' => $cashflow, 'lines' => $lines]);
         Audit::record('trade.'.$d->kind.'_posted', (string) $d->id);
     }
 
@@ -209,10 +209,10 @@ return $old;
             }abort_unless($allowed, 403);
             $ids = AccountingAccess::branches($u)->pluck('id');
             $warehouses = Warehouse::whereIn('branch_id', $ids)->pluck('id');
-            foreach (TradeDocument::where('book', $book)->whereIn('kind', $allowed)->whereIn('warehouse_id', $warehouses)->get() as $d) {
+            foreach (TradeDocument::current()->where('book', $book)->whereIn('kind', $allowed)->whereIn('warehouse_id', $warehouses)->get() as $d) {
                 $out = $this->outstanding($d);
                 $days = max(0, (int) CarbonImmutable::parse($d->due_on)->diffInDays(CarbonImmutable::parse(AccountingLedger::today()), false));
-                $rows[] = [...$d->only('id', 'number', 'kind', 'party_name', 'date', 'due_on', 'total', 'warehouse_id'), 'outstanding' => $out, 'days_overdue' => $days, 'bucket' => $days === 0 ? 'current' : ($days <= 30 ? '1–30' : ($days <= 60 ? '31–60' : ($days <= 90 ? '61–90' : '90+')))];
+                $rows[] = [...$d->only('id', 'number', 'kind', 'party_name', 'date', 'due_on', 'total', 'warehouse_id'), 'number' => $d->display_number, 'outstanding' => $out, 'days_overdue' => $days, 'bucket' => $days === 0 ? 'current' : ($days <= 30 ? '1–30' : ($days <= 60 ? '31–60' : ($days <= 90 ? '61–90' : '90+')))];
             }$controls = [];
             $l = app(AccountingLedger::class);
             foreach (['payable' => ['bill', 'opening_payable'], 'receivable' => ['invoice', 'opening_receivable']] as $role => $kinds) {

@@ -9,9 +9,11 @@ use App\Models\ProductVariant;
 use App\Models\PurchaseOrder;
 use App\Models\Role;
 use App\Models\StockBalance;
+use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\TenantModule;
 use App\Models\TradeDocument;
+use App\Models\TradeDocumentDetail;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\AccountingLedger;
@@ -22,9 +24,11 @@ use App\Services\CurrencyRates;
 use App\Services\ForeignLedger;
 use App\Services\Onboarding;
 use App\Services\PurchaseOrders;
+use App\Services\StockLedger;
 use App\Services\Suppliers;
 use App\Services\TenantContext;
 use App\Services\TradeCurrency;
+use App\Services\TradeInvoiceEdits;
 use App\Services\TradeLedger;
 use App\Services\TradePurchasing;
 use App\Services\TradeSales;
@@ -147,7 +151,7 @@ class TradeTest extends TestCase
         $this->actingAs($this->u)->postJson('/trade/quote-preview/'.$q->id, $d)->assertOk()->assertJsonPath('data.total', '8.00');
         $revised = $this->postJson('/trade/quotes/'.$q->id, $d)->assertOk()->json('data');
         $this->assertSame($q->id, $revised['parent_id']);
-        $this->getJson('/trade/data')->assertOk()->assertJsonPath('data.documents.0.quote_closed', false)->assertJsonPath('data.documents.1.quote_closed', true);
+        $this->getJson('/trade/data')->assertOk()->assertJsonCount(1, 'data.documents')->assertJsonPath('data.documents.0.quote_closed', false)->assertJsonPath('data.documents.0.number', $q->number);
         $this->postJson('/trade/quotes/'.$q->id, [...$d, 'request_id' => (string) Str::uuid()])->assertUnprocessable();
         app(TenantContext::class)->id = $this->u->tenant_id;
         $this->assertSame(2, TradeDocument::where('kind', 'quote')->count());
@@ -413,4 +417,120 @@ class TradeTest extends TestCase
         $this->travelBack();
         $this->assertSame('9.000', StockBalance::first()->quantity);
     }
+
+    private function invoiceEditData(TradeDocument $invoice, string $quantity = '1', string $price = '12'): array
+    {
+        return $this->request(['warehouse_id' => $invoice->warehouse_id, 'customer_id' => $invoice->customer_id, 'due_on' => $invoice->due_on, 'currency' => $invoice->currency_snapshot['currency'] ?? 'USD', 'notes' => 'Edited invoice', 'items' => [['variant_id' => $this->v->id, 'quantity' => $quantity, 'unit_price' => $price, 'discount_percent' => '0']]]);
+    }
+
+    public function test_invoice_edits_keep_one_number_without_creating_a_quote_or_double_posting(): void
+    {
+        $this->receive($this->order(), '10');
+        $quote = $this->quote('2');
+        $invoice = app(TradeSales::class)->invoice($this->u, $quote->id, $this->request(['accepted' => true]));
+        $input = $this->invoiceEditData($invoice, '3');
+        $edits = app(TradeInvoiceEdits::class);
+        $edited = $edits->amend($this->u, $invoice->id, $input);
+        $this->assertSame($invoice->number, $edited->display_number);
+        $this->assertSame('36.0000', $edited->total);
+        $this->assertSame('36.0000', $this->balance('receivable'));
+        $this->assertSame('7.000', StockBalance::firstOrFail()->quantity);
+        $this->assertSame('0.0000', app(TradeLedger::class)->outstanding($invoice));
+        $this->assertSame(1, TradeDocument::where('kind', 'quote')->count());
+        $this->assertSame(1, TradeDocument::current()->where('kind', 'invoice')->count());
+        $this->assertSame($edited->id, $edits->amend($this->u, $invoice->id, $input)->id);
+        $this->assertSame('7.000', StockBalance::firstOrFail()->quantity);
+        $this->invalid(fn () => $edits->amend($this->u, $invoice->id, $this->invoiceEditData($invoice)));
+        $this->actingAs($this->u)->getJson('/trade/data')->assertOk()->assertJsonPath('data.documents.0.number', $invoice->number)->assertJsonPath('data.documents.0.invoice_editable', true);
+        $this->getJson('/trade/history/'.$edited->id)->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('data.0.number', $invoice->number)->assertJsonPath('data.1.superseded', true);
+        $this->get('/trade/print/document/'.$edited->id)->assertOk()->assertSee($invoice->number);
+    }
+
+    public function test_invoice_edit_failure_and_locked_period_leave_the_original_untouched(): void
+    {
+        $this->receive($this->order(), '2');
+        $invoice = app(TradeSales::class)->invoice($this->u, $this->quote('2')->id, $this->request(['accepted' => true]));
+        $edits = app(TradeInvoiceEdits::class);
+        $documents = TradeDocument::count();
+        $movements = StockMovement::count();
+        $this->invalid(fn () => $edits->amend($this->u, $invoice->id, $this->invoiceEditData($invoice, '3')));
+        $this->assertSame($documents, TradeDocument::count());
+        $this->assertSame($movements, StockMovement::count());
+        AccountingPeriod::query()->update(['locked' => true]);
+        $this->invalid(fn () => $edits->amend($this->u, $invoice->id, $this->invoiceEditData($invoice, '1')));
+        $this->assertSame($documents, TradeDocument::count());
+        $this->assertSame($movements, StockMovement::count());
+        $this->assertSame('20.0000', $this->balance('receivable'));
+        $this->assertSame('0.000', StockBalance::firstOrFail()->quantity);
+    }
+
+    public function test_price_only_invoice_edit_keeps_original_cost_after_later_purchases(): void
+    {
+        $this->receive($this->order(), '2');
+        $invoice = app(TradeSales::class)->invoice($this->u, $this->quote()->id, $this->request(['accepted' => true]));
+        app(StockLedger::class)->post($this->u, $this->request(['warehouse_id' => $this->w->id, 'type' => 'adjustment', 'reason' => 'Later delivery', 'lines' => [['variant_id' => $this->v->id, 'quantity' => '2', 'unit_cost' => '10']]]));
+        $before = StockBalance::firstOrFail();
+        $cost = $this->balance('cogs');
+        app(TradeInvoiceEdits::class)->amend($this->u, $invoice->id, $this->invoiceEditData($invoice));
+        $this->assertSame($before->quantity, StockBalance::firstOrFail()->quantity);
+        $this->assertSame($before->value, StockBalance::firstOrFail()->value);
+        $this->assertSame($cost, $this->balance('cogs'));
+    }
+
+    public function test_paid_invoice_only_allows_details_and_keeps_payments_and_stock(): void
+    {
+        $this->receive($this->order(), '2');
+        $invoice = app(TradeSales::class)->invoice($this->u, $this->quote()->id, $this->request(['accepted' => true]));
+        app(TradeLedger::class)->settle($this->u, $invoice->id, $this->request(['account_id' => app(AccountingLedger::class)->account('cash_safe')->id, 'amount' => '5']));
+        $edits = app(TradeInvoiceEdits::class);
+        $this->invalid(fn () => $edits->amend($this->u, $invoice->id, $this->invoiceEditData($invoice)));
+        $data = $this->request(['reference' => 'PO-SCHOOL', 'notes' => 'Updated school contact']);
+        $edits->details($this->u, $invoice->id, $data);
+        $edits->details($this->u, $invoice->id, $data);
+        $this->assertSame(1, TradeDocumentDetail::count());
+        $this->assertSame('5.0000', app(TradeLedger::class)->outstanding($invoice));
+        $this->assertSame('1.000', StockBalance::firstOrFail()->quantity);
+        $this->actingAs($this->u)->getJson('/trade/data')->assertOk()->assertJsonPath('data.documents.1.reference', 'PO-SCHOOL')->assertJsonPath('data.documents.1.invoice_editable', false);
+        $this->get('/trade/print/document/'.$invoice->id)->assertOk()->assertSee('PO-SCHOOL')->assertSee('Updated school contact');
+        $this->postJson('/trade/invoice-edits/'.$invoice->id, $this->invoiceEditData($invoice))->assertUnprocessable();
+    }
+
+    public function test_invoice_edit_permissions_and_foreign_amounts_are_preserved(): void
+    {
+        TenantModule::where('key', 'currencies')->update(['enabled' => true]);
+        $rates = app(CurrencyRates::class);
+        $currency = $rates->currency($this->u, ['code' => 'ZAR', 'name' => 'Rand', 'minor_units' => 2]);
+        $rate = $rates->propose($this->u, ['currency_id' => $currency->id, 'effective_on' => AccountingLedger::today(), 'rate' => '0.05', 'source' => 'Original']);
+        $rates->approve($this->u, $rate->id);
+        $this->receive($this->order(), '2');
+        $seed = $this->quote();
+        $q = app(TradeSales::class)->quote($this->u, [...$this->invoiceEditData($seed, '1', '200'), 'currency' => 'ZAR']);
+        $invoice = app(TradeSales::class)->invoice($this->u, $q->id, $this->request(['accepted' => true]));
+        $edited = app(TradeInvoiceEdits::class)->amend($this->u, $invoice->id, $this->invoiceEditData($invoice, '1', '300'));
+        $this->assertSame('15.0000', $edited->total);
+        $this->assertSame('300.00', $edited->currency_snapshot['original_amount']);
+        $this->assertSame('0.0000', app(TradeCurrency::class)->outstandingOriginal($invoice));
+        $this->assertSame('15.0000', $this->balance('receivable'));
+        $role = $this->u->role;
+        $role->update(['permissions' => ['sales.view']]);
+        $this->u->unsetRelation('role');
+        $this->actingAs($this->u)->postJson('/trade/invoice-edits/'.$edited->id, $this->invoiceEditData($edited))->assertForbidden();
+        $this->postJson('/trade/invoice-details/'.$edited->id, $this->request(['reference' => 'No permission']))->assertForbidden();
+    }
+    public function test_service_invoice_edits_need_no_stock_and_create_no_new_quotation(): void
+    {
+        $this->v->product->update(['item_type' => 'service']);
+        $quote = $this->quote();
+        $invoice = app(TradeSales::class)->invoice($this->u, $quote->id, $this->request(['accepted' => true]));
+        $edited = app(\App\Services\TradeInvoiceEdits::class)->amend($this->u, $invoice->id, $this->invoiceEditData($invoice, '2'));
+        $this->assertSame($invoice->number, $edited->display_number);
+        $this->assertSame('24.0000', $this->balance('receivable'));
+        $this->assertSame(0, StockBalance::count());
+        $this->assertSame(0, \App\Models\StockMovement::count());
+        $this->assertSame(1, TradeDocument::where('kind', 'quote')->count());
+        $report = app(TradeLedger::class)->report($this->u);
+        $this->assertCount(1, $report['aging']);
+        $this->assertSame($invoice->number, $report['aging'][0]['number']);
+    }
+
 }

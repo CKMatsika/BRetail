@@ -12,8 +12,10 @@
 
 <h1>{{ $company->name }}</h1>
 <h2>{{ ucfirst($kind) }} {{ $document['number'] }}</h2>
+@if($document['superseded'] ?? false)<p class="mode">Previous version · This document has been edited. Use the latest version for current amounts.</p>@endif
 <p class="mode">{{ strtoupper($document['book']) }} · {{ $company->base_currency }}</p>
 <p>{{ $document['party_name'] ?? $document['supplier_name'] }}<br>Date: {{ $document['date'] }}<br>Due / expiry: {{ $document['due_on'] ?? $document['expected_on'] ?? '—' }}</p>
+<p>Reference: {{ $document['reference'] ?? '—' }}</p>
 <table>
 <thead>
 <tr>
