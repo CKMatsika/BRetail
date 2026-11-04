@@ -12,7 +12,8 @@ class Company extends TenantRecord
 
     public function getLogoUrlAttribute(): ?string
     {
-        return $this->logo_path ? '/company/logo?v='.substr(hash('sha256', $this->logo_path), 0, 12) : null;
+        return $this->logo_path && Storage::disk('local')->exists($this->logo_path)
+            ? '/company/logo?v='.substr(hash('sha256', $this->logo_path), 0, 12) : null;
     }
 
     public function getDocumentLogoAttribute(): ?string
@@ -22,7 +23,7 @@ class Company extends TenantRecord
             return null;
         }
         $mime = $disk->mimeType($this->logo_path);
-        if (! in_array($mime, ['image/png', 'image/jpeg', 'image/webp'], true)) {
+        if (! in_array($mime, ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp', 'image/x-ms-bmp'], true)) {
             return null;
         }
 

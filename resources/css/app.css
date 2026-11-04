@@ -194,6 +194,16 @@ small {
     font-weight: 650;
     flex-shrink: 0;
 }
+.company-avatar {
+    width: 42px;
+    height: 42px;
+    overflow: hidden;
+}
+.company-avatar img {
+    display: block;
+    padding: 3px;
+    box-sizing: border-box;
+}
 .status-dot {
     width: 6px;
     height: 6px;

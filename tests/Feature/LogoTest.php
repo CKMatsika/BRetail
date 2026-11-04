@@ -35,8 +35,33 @@ class LogoTest extends TestCase
         app(TenantContext::class)->id = $owner->tenant_id;
         $company = Company::firstOrFail();
         Storage::disk('local')->delete($company->logo_path);
+        $this->assertNull($company->logo_url);
         $this->assertStringNotContainsString('<img', view('partials.company-logo')->render());
+        $this->get('/company/logo')->assertNotFound();
         auth()->logout();
         $this->get('/company/logo')->assertRedirect('/login');
+    }
+
+    public function test_supported_formats_are_served_as_png(): void
+    {
+        Storage::fake('local');
+        $owner = app(Onboarding::class)->register(['name' => 'Owner', 'email' => 'formats@example.test', 'password' => 'SecurePassword123', 'company_name' => 'Shop', 'industry' => 'general', 'base_currency' => 'USD', 'branch_name' => 'Main', 'branch_code' => 'MAIN', 'warehouse_name' => 'Main']);
+        DB::table('tenant_subscriptions')->where('tenant_id', $owner->tenant_id)->update(['status' => 'active']);
+        $this->actingAs($owner);
+
+        foreach (['png', 'jpeg', 'webp', 'gif', 'bmp'] as $format) {
+            $image = imagecreatetruecolor(120, 40);
+            imagefill($image, 0, 0, imagecolorallocate($image, 20, 100, 70));
+            ob_start();
+            $encoder = 'image'.$format;
+            $encoder($image);
+            $bytes = ob_get_clean();
+            imagedestroy($image);
+            $this->post('/company/logo', ['logo' => UploadedFile::fake()->createWithContent('logo.'.$format, $bytes)])
+                ->assertSessionHasNoErrors();
+            $response = $this->get('/company/logo')->assertOk()->assertHeader('Content-Type', 'image/png');
+            $info = getimagesize($response->baseResponse->getFile()->getPathname());
+            $this->assertSame([120, 40], array_slice($info, 0, 2));
+        }
     }
 }

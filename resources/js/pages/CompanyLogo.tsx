@@ -12,13 +12,14 @@ export default function CompanyLogo() {
         >
             <h2>Company logo</h2>
             <p className="muted">
-                PNG, JPEG or WebP. Maximum 2 MB and 4096 × 4096 pixels.
+                PNG, JPEG, WebP, GIF or BMP. Maximum 2 MB and 4096 × 4096 pixels.
+                Logos are saved as PNG; animated GIFs use the first frame.
             </p>
             <label className="field">
                 Upload logo
                 <input
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept=".png,.jpg,.jpeg,.webp,.gif,.bmp,image/png,image/jpeg,image/webp,image/gif,image/bmp"
                     onChange={(e) =>
                         f.setData("logo", e.target.files?.[0] ?? null)
                     }

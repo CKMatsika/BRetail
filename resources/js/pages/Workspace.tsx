@@ -461,6 +461,7 @@ export default function Workspace(p: Props) {
     const [bm, setBm] = useState<Branch | true | null>(null);
     const [tm, setTm] = useState<Person | true | null>(null);
     const [search, setSearch] = useState("");
+    const [failedLogo, setFailedLogo] = useState<string | null>(null);
     const can = (s: string) =>
         p.permissions.includes("*") || p.permissions.includes(s);
     const title = nav.find((n) => n.key === p.section)?.label ?? "Overview";
@@ -476,10 +477,11 @@ export default function Workspace(p: Props) {
                 </Link>
                 <div className="company-switch">
                     <span className="company-avatar">
-                        {p.company.logo_url ? (
+                        {p.company.logo_url && failedLogo !== p.company.logo_url ? (
                             <img
                                 src={p.company.logo_url}
                                 alt="Company logo"
+                                onError={() => setFailedLogo(p.company.logo_url ?? null)}
                                 style={{
                                     width: "100%",
                                     height: "100%",
