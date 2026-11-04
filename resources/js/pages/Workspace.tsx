@@ -497,29 +497,90 @@ function CompanyForm({
             </label>
             <div className="form-grid">
                 {[
-                    "registration",
-                    "tax_id",
-                    "contact_email",
-                    "phone",
-                    "address",
-                    "receipt_footer",
-                    "invoice_prefix",
-                ].map((k) => (
-                    <label key={k} className="field">
-                        {k.replaceAll("_", " ")}
+                    { key: "registration", label: "Registration number" },
+                    { key: "tax_id", label: "Tax ID" },
+                    { key: "vat_number", label: "VAT Number" },
+                    {
+                        key: "contact_email",
+                        label: "Contact email",
+                        type: "email",
+                    },
+                    { key: "phone", label: "Contact number", type: "tel" },
+                    {
+                        key: "alternative_phone",
+                        label: "Alternative contact number",
+                        type: "tel",
+                    },
+                    { key: "receipt_footer", label: "Receipt footer" },
+                    { key: "invoice_prefix", label: "Invoice prefix" },
+                ].map(({ key, label, type }) => (
+                    <label key={key} className="field">
+                        {label}
                         <input
                             disabled={!editable}
-                            value={f.data.settings[k] ?? ""}
+                            type={type ?? "text"}
+                            value={f.data.settings[key] ?? ""}
                             onChange={(e) =>
                                 f.setData("settings", {
                                     ...f.data.settings,
-                                    [k]: e.target.value,
+                                    [key]: e.target.value,
                                 })
                             }
                         />
                     </label>
                 ))}
             </div>
+            <label className="field">
+                Company address
+                <textarea
+                    disabled={!editable}
+                    rows={3}
+                    maxLength={255}
+                    value={f.data.settings.address ?? ""}
+                    onChange={(e) =>
+                        f.setData("settings", {
+                            ...f.data.settings,
+                            address: e.target.value,
+                        })
+                    }
+                />
+            </label>
+            <section
+                style={{
+                    borderTop: "1px solid var(--line)",
+                    paddingTop: 20,
+                    marginTop: 20,
+                }}
+            >
+                <h3>Invoice & quotation payment details</h3>
+                <p className="muted">
+                    Banking details appear near the bottom of invoices and
+                    quotations.
+                </p>
+                <label className="field">
+                    Banking details
+                    <textarea
+                        disabled={!editable}
+                        rows={6}
+                        maxLength={2000}
+                        placeholder={
+                            "Bank name: …\nAccount name: …\nAccount number: …\nBranch: …\nCurrency: …\nSWIFT / branch code: …"
+                        }
+                        value={f.data.settings.banking_details ?? ""}
+                        onChange={(e) =>
+                            f.setData("settings", {
+                                ...f.data.settings,
+                                banking_details: e.target.value,
+                            })
+                        }
+                    />
+                </label>
+                <p className="muted">
+                    Enter one detail per line. You can include multiple bank
+                    accounts and their currencies. These details are not printed
+                    on POS receipts.
+                </p>
+            </section>
             <div className="notice">
                 Base currency: {company.base_currency} · Accepted:{" "}
                 {company.accepted_currencies.join(", ")}

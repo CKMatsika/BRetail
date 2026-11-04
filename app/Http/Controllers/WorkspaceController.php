@@ -157,7 +157,7 @@ class WorkspaceController
     public function company(Request $r)
     {
         $this->permit($r, 'company.configure');
-        $data = $r->validate(['name' => 'required|string|max:160', 'settings.registration' => 'nullable|string|max:120', 'settings.tax_id' => 'nullable|string|max:120', 'settings.phone' => 'nullable|string|max:40', 'settings.contact_email' => 'nullable|email|max:255', 'settings.address' => 'nullable|string|max:255', 'settings.receipt_footer' => 'nullable|string|max:255', 'settings.invoice_prefix' => 'required|alpha_dash|max:20']);
+        $data = $r->validate(['name' => 'required|string|max:160', 'settings.registration' => 'nullable|string|max:120', 'settings.tax_id' => 'nullable|string|max:120', 'settings.vat_number' => 'nullable|string|max:120', 'settings.alternative_phone' => 'nullable|string|max:40', 'settings.banking_details' => 'nullable|string|max:2000', 'settings.phone' => 'nullable|string|max:40', 'settings.contact_email' => 'nullable|email|max:255', 'settings.address' => 'nullable|string|max:255', 'settings.receipt_footer' => 'nullable|string|max:255', 'settings.invoice_prefix' => 'required|alpha_dash|max:20']);
         DB::transaction(function () use ($data) {
             $company = Company::firstOrFail();
             $company->update(['name' => $data['name'], 'settings' => array_merge($company->settings, $data['settings'])]);

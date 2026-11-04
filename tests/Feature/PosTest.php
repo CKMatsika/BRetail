@@ -378,4 +378,12 @@ class PosTest extends TestCase
         $this->assertSame('3.00', $report['currency_totals'][0]['tax']);
         $this->assertNull($report['business']['sales']);
     }
+
+    public function test_company_banking_details_are_not_added_to_pos_receipts(): void
+    {
+        $company = Company::firstOrFail();
+        $company->update(['settings' => [...$company->settings, 'banking_details' => 'PRIVATE-BANK-00123456789']]);
+        $sale = $this->sale();
+        $this->actingAs($this->owner)->get('/pos/sales/'.$sale->id.'/receipt')->assertOk()->assertDontSee('Banking details')->assertDontSee('PRIVATE-BANK-00123456789');
+    }
 }

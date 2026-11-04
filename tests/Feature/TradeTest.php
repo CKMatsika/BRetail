@@ -637,4 +637,27 @@ class TradeTest extends TestCase
         $this->get('/reports/export?'.http_build_query([...$filters, 'report' => 'creditors']))->assertForbidden();
         $this->get('/reports?'.http_build_query([...$filters, 'branch_id' => $this->w->branch_id]))->assertNotFound();
     }
+
+    public function test_company_contact_tax_and_banking_details_print_on_quotes_and_invoices_only(): void
+    {
+        $company = Company::firstOrFail();
+        $settings = [...$company->settings, 'address' => "24 Business Road\nHarare, Zimbabwe", 'phone' => '+263 242 123456', 'alternative_phone' => '+263 771 234567', 'contact_email' => 'accounts@trade.test', 'tax_id' => 'TIN-123456', 'vat_number' => 'VAT-654321', 'banking_details' => "Bank: Example Bank\nAccount name: Trade shop\nAccount number: 00123456789\nCurrency: USD"];
+        $this->actingAs($this->u)->patch('/company', ['name' => $company->name, 'settings' => $settings])->assertSessionHasNoErrors();
+        app(TenantContext::class)->id = $this->u->tenant_id;
+        $this->assertSame('VAT-654321', $company->fresh()->settings['vat_number']);
+        $this->assertSame($settings['banking_details'], $company->fresh()->settings['banking_details']);
+        $this->receive($this->order(), '2');
+        $quote = $this->quote();
+        $invoice = app(TradeSales::class)->invoice($this->u, $quote->id, $this->request(['accepted' => true]));
+        foreach ([$quote, $invoice] as $doc) {
+            $this->actingAs($this->u)->get('/trade/print/document/'.$doc->id)->assertOk()
+                ->assertSee('24 Business Road')->assertSee('+263 242 123456')->assertSee('+263 771 234567')
+                ->assertSee('accounts@trade.test')->assertSee('Tax ID: TIN-123456')->assertSee('VAT Number: VAT-654321')
+                ->assertSee('Banking details')->assertSee('00123456789');
+        }
+        app(TenantContext::class)->id = $this->u->tenant_id;
+        $order = $this->order();
+        $this->get('/trade/print/order/'.$order->id)->assertOk()->assertSee('VAT Number: VAT-654321')->assertDontSee('00123456789')->assertDontSee('Banking details');
+        $this->patch('/company', ['name' => $company->name, 'settings' => ['invoice_prefix' => 'INV', 'banking_details' => str_repeat('x', 2001)]])->assertSessionHasErrors('settings.banking_details');
+    }
 }
