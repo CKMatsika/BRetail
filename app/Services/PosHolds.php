@@ -67,6 +67,8 @@ final class PosHolds
             if ($optIn && ! TenantModule::where('key', 'loyalty')->where('enabled', true)->exists()) {
                 throw ValidationException::withMessages(['loyalty_opt_in' => 'Loyalty is not enabled for this workspace.']);
             }
+            $d['name'] = trim($d['name']);
+            app(PartyDuplicates::class)->ensureUnique(PosCustomer::class, $d);
             $c = PosCustomer::create($d);
             if ($optIn) app(LoyaltyService::class)->enroll($c, $user);
             Audit::record('pos.customer_created', (string) $c->id);

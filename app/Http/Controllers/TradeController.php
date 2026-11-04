@@ -17,7 +17,6 @@ use App\Models\TradeDocument;
 use App\Models\Warehouse;
 use App\Services\AccountingAccess;
 use App\Services\AccountingLedger;
-use App\Services\Audit;
 use App\Services\InventoryAccess;
 use App\Services\PurchaseOrders;
 use App\Services\Suppliers;
@@ -26,7 +25,6 @@ use App\Services\TradeLedger;
 use App\Services\TradePurchasing;
 use App\Services\TradeSales;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 final class TradeController
@@ -53,7 +51,7 @@ final class TradeController
         $closedQuotes = TradeDocument::whereIn('parent_id', $documents->where('kind', 'quote')->pluck('id'))->whereIn('kind', ['quote', 'invoice'])->pluck('parent_id')->flip();
         $documents = $documents->map(fn ($d) => [...app(\App\Services\TradeDocuments::class)->present($d), 'quote_closed' => $d->kind === 'quote' && $closedQuotes->has($d->id), 'original_outstanding' => $d->currency_snapshot && in_array($d->kind, ['invoice', 'bill']) ? app(TradeCurrency::class)->outstandingOriginal($d) : null, 'outstanding' => in_array($d->kind, ['bill', 'invoice', 'opening_payable', 'opening_receivable']) ? $t->outstanding($d) : null]);
 
-        return ['company_logo_url' => Company::firstOrFail()->logo_url, 'book' => $book, 'today' => AccountingLedger::today(), 'currencies' => TenantModule::where('key', 'currencies')->where('enabled', true)->exists() ? Currency::where('active', true)->get(['code', 'name']) : [], 'currency' => AccountingAccess::setting()->currency, 'purchasing' => $purchase, 'sales' => $sales, 'warehouses' => $w, 'suppliers' => $purchase ? Supplier::orderBy('name')->get() : [], 'customers' => $sales ? PosCustomer::orderBy('name')->get() : [], 'credits' => $sales && $r->user()->canDo('sales.configure') ? CustomerCredit::get() : [], 'orders' => $purchase ? PurchaseOrder::whereIn('warehouse_id', $w->pluck('id'))->where('book', $book)->latest('id')->limit(200)->get() : [], 'documents' => $documents, 'variants' => ProductVariant::with('product:id,name,item_type')->where('active', true)->get(['id', 'product_id', 'name', 'sku', 'selling_price']), 'foreign_accounts' => TenantModule::where('key', 'currencies')->where('enabled', true)->exists() && $r->user()->canDo('currencies.post') ? ForeignAccount::whereIn('branch_id', $w->pluck('branch_id'))->whereIn('kind', ['bank', 'safe', 'mobile'])->get()->map(fn ($a) => [...$a->only('id', 'branch_id', 'name'), 'currency' => Currency::findOrFail($a->currency_id)->code]) : [], 'cash_accounts' => ChartAccount::whereNotIn('id', ForeignAccount::select('account_id'))->where('active', true)->where('is_cash', true)->get(['id', 'code', 'name']), 'report' => $t->report($r->user())];
+        return ['company_logo_url' => Company::firstOrFail()->logo_url, 'book' => $book, 'today' => AccountingLedger::today(), 'currencies' => TenantModule::where('key', 'currencies')->where('enabled', true)->exists() ? Currency::where('active', true)->get(['code', 'name']) : [], 'currency' => AccountingAccess::setting()->currency, 'purchasing' => $purchase, 'sales' => $sales, 'warehouses' => $w, 'suppliers' => $purchase ? Supplier::orderBy('name')->get() : [], 'customers' => $sales ? PosCustomer::orderBy('name')->get(['id', 'name', 'email', 'phone']) : [], 'credits' => $sales && $r->user()->canDo('sales.configure') ? CustomerCredit::get() : [], 'orders' => $purchase ? PurchaseOrder::whereIn('warehouse_id', $w->pluck('id'))->where('book', $book)->latest('id')->limit(200)->get() : [], 'documents' => $documents, 'variants' => ProductVariant::with('product:id,name,item_type')->where('active', true)->get(['id', 'product_id', 'name', 'sku', 'selling_price']), 'foreign_accounts' => TenantModule::where('key', 'currencies')->where('enabled', true)->exists() && $r->user()->canDo('currencies.post') ? ForeignAccount::whereIn('branch_id', $w->pluck('branch_id'))->whereIn('kind', ['bank', 'safe', 'mobile'])->get()->map(fn ($a) => [...$a->only('id', 'branch_id', 'name'), 'currency' => Currency::findOrFail($a->currency_id)->code]) : [], 'cash_accounts' => ChartAccount::whereNotIn('id', ForeignAccount::select('account_id'))->where('active', true)->where('is_cash', true)->get(['id', 'code', 'name']), 'report' => $t->report($r->user())];
     }
 
     public function page(Request $r)
@@ -77,22 +75,29 @@ final class TradeController
         $u = $r->user();
         $d = $r->all();
         $result = match ($action) {
-            'suppliers' => app(Suppliers::class)->save($u, $d, $id ? (int) $id : null),'orders' => app(PurchaseOrders::class)->create($u, $d),'approve','cancel' => app(PurchaseOrders::class)->transition($u, (int) $id, $action),'receipts' => app(TradePurchasing::class)->receive($u, (int) $id, $d),'bills' => app(TradePurchasing::class)->bill($u, (int) $id, $d),'customers' => $this->customer($r),'credits' => app(TradeLedger::class)->credit($u, $d),'quote-preview' => app(TradeSales::class)->quote($u, $d, $id ? (int) $id : null, true),'quotes' => app(TradeSales::class)->quote($u, $d, $id ? (int) $id : null),'invoice-preview' => app(\App\Services\TradeInvoiceEdits::class)->amend($u, (int) $id, $d, true),'invoice-edits' => app(\App\Services\TradeInvoiceEdits::class)->amend($u, (int) $id, $d),'invoice-details' => app(\App\Services\TradeInvoiceEdits::class)->details($u, (int) $id, $d),'invoices' => app(TradeSales::class)->invoice($u, (int) $id, $d),'settlements' => app(TradeLedger::class)->settle($u, (int) $id, $d),'returns' => app(TradeSales::class)->creditReturn($u, (int) $id, $d),'openings' => app(TradeLedger::class)->opening($u, $d),default => abort(404)
+            'suppliers' => app(Suppliers::class)->save($u, $d, $id ? (int) $id : null),'orders' => app(PurchaseOrders::class)->create($u, $d),'approve','cancel' => app(PurchaseOrders::class)->transition($u, (int) $id, $action),'receipts' => app(TradePurchasing::class)->receive($u, (int) $id, $d),'bills' => app(TradePurchasing::class)->bill($u, (int) $id, $d),'customers' => app(\App\Services\Customers::class)->save($u, $d, $id ? (int) $id : null),'credits' => app(TradeLedger::class)->credit($u, $d),'quote-preview' => app(TradeSales::class)->quote($u, $d, $id ? (int) $id : null, true),'quotes' => app(TradeSales::class)->quote($u, $d, $id ? (int) $id : null),'invoice-preview' => app(\App\Services\TradeInvoiceEdits::class)->amend($u, (int) $id, $d, true),'invoice-edits' => app(\App\Services\TradeInvoiceEdits::class)->amend($u, (int) $id, $d),'invoice-details' => app(\App\Services\TradeInvoiceEdits::class)->details($u, (int) $id, $d),'invoices' => app(TradeSales::class)->invoice($u, (int) $id, $d),'settlements' => app(TradeLedger::class)->settle($u, (int) $id, $d),'returns' => app(TradeSales::class)->creditReturn($u, (int) $id, $d),'openings' => app(TradeLedger::class)->opening($u, $d),default => abort(404)
         };
 
         return ['data' => $result instanceof TradeDocument ? app(\App\Services\TradeDocuments::class)->present($result) : $result, 'message' => $action === 'quote-preview' ? 'Preview calculated.' : 'Saved successfully.'];
     }
 
-    private function customer(Request $r): PosCustomer
+    public function customer(Request $r, string $id)
     {
-        return DB::transaction(function () use ($r) {
-            app(TradeLedger::class)->lock($r->user(), 'sales.quote');
-            $d = $r->validate(['name' => 'required|string|max:160', 'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:40']);
-            $c = PosCustomer::create($d);
-            Audit::record('sales.customer_created', (string) $c->id);
+        abort_unless($this->allowed($r, 'sales'), 403);
 
-            return $c;
-        });
+        return ['data' => PosCustomer::findOrFail($id)->only('id', 'name', 'email', 'phone')];
+    }
+
+    public function updateCustomer(Request $r, string $id)
+    {
+        return ['data' => app(\App\Services\Customers::class)->save($r->user(), $r->all(), (int) $id), 'message' => 'Customer updated.'];
+    }
+
+    public function deleteCustomer(Request $r, string $id)
+    {
+        app(\App\Services\Customers::class)->delete($r->user(), (int) $id);
+
+        return response()->json(['message' => 'Customer deleted.']);
     }
 
     public function history(Request $r, string $id)

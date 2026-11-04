@@ -50,6 +50,12 @@ type Doc = {
     outstanding?: string;
     items: Item[];
 };
+type Customer = {
+    id: number;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+};
 export type TradeData = {
     company_logo_url?: string | null;
     book: string;
@@ -72,7 +78,7 @@ export type TradeData = {
         terms_days: number;
         active: boolean;
     }[];
-    customers: { id: number; name: string }[];
+    customers: Customer[];
     orders: Doc[];
     documents: Doc[];
     variants: {
@@ -395,6 +401,17 @@ export default function Trade({
     );
     const [area, setArea] = useState(initialArea);
     const [party, setParty] = useState("");
+    const [editingCustomer, setEditingCustomer] = useState<Customer | null>(
+        null,
+    );
+    const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(
+        null,
+    );
+    const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(
+        null,
+    );
+    const [deleting, setDeleting] = useState(false);
+
     const [search, setSearch] = useState("");
     const [documentStatus, setDocumentStatus] = useState("all");
     const [d, setD] = useState(initial),
@@ -520,6 +537,9 @@ export default function Trade({
             "Allocate verified opening balances to customers and suppliers.",
     };
     const navigate = (next: string) => {
+        setEditingCustomer(null);
+        setViewingCustomer(null);
+        setDeletingCustomer(null);
         setHistory(null);
         setTab(next);
         setSelected(null);
@@ -1550,7 +1570,7 @@ export default function Trade({
                 )}
                 {tab === "customers" && (
                     <>
-                        {can("sales.quote") && (
+                        {can("sales.quote") && !editingCustomer && (
                             <Form
                                 title="Create customer"
                                 fields={[
@@ -1570,11 +1590,126 @@ export default function Trade({
                                 save={(v) => post("customers", v)}
                             />
                         )}
+                        {viewingCustomer && (
+                            <section
+                                className="trade-card"
+                                aria-label="Customer details"
+                            >
+                                <h3>{viewingCustomer.name}</h3>
+                                <p>
+                                    Email:{" "}
+                                    {viewingCustomer.email || "Not provided"}
+                                </p>
+                                <p>
+                                    Phone:{" "}
+                                    {viewingCustomer.phone || "Not provided"}
+                                </p>
+                                <button
+                                    onClick={() => setViewingCustomer(null)}
+                                >
+                                    Close customer details
+                                </button>
+                            </section>
+                        )}
+                        {editingCustomer && can("sales.quote") && (
+                            <Form
+                                key={editingCustomer.id}
+                                title={"Edit customer: " + editingCustomer.name}
+                                fields={[
+                                    {
+                                        key: "name",
+                                        label: "Customer name",
+                                        value: editingCustomer.name,
+                                    },
+                                    {
+                                        key: "email",
+                                        label: "Customer email",
+                                        type: "email",
+                                        optional: true,
+                                        value: editingCustomer.email ?? "",
+                                    },
+                                    {
+                                        key: "phone",
+                                        label: "Customer phone",
+                                        optional: true,
+                                        value: editingCustomer.phone ?? "",
+                                    },
+                                ]}
+                                save={async (v) => {
+                                    await axios.patch(
+                                        `/trade/customers/${editingCustomer.id}`,
+                                        v,
+                                    );
+                                    await reload();
+                                    setEditingCustomer(null);
+                                    setNotice("Customer updated successfully.");
+                                }}
+                                button="Save customer changes"
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingCustomer(null)}
+                                >
+                                    Cancel customer editing
+                                </button>
+                            </Form>
+                        )}
+                        {deletingCustomer && (
+                            <section
+                                className="trade-card"
+                                role="alertdialog"
+                                aria-label="Confirm customer deletion"
+                            >
+                                <h3>Delete {deletingCustomer.name}?</h3>
+                                <p>
+                                    Only unused customer records can be deleted.
+                                    Customers with documents, sales or loyalty
+                                    history are protected.
+                                </p>
+                                <button
+                                    disabled={deleting}
+                                    onClick={async () => {
+                                        setDeleting(true);
+                                        try {
+                                            await axios.delete(
+                                                `/trade/customers/${deletingCustomer.id}`,
+                                            );
+                                            await reload();
+                                            if (
+                                                party ===
+                                                String(deletingCustomer.id)
+                                            )
+                                                setParty("");
+                                            setDeletingCustomer(null);
+                                            setViewingCustomer(null);
+                                            setEditingCustomer(null);
+                                            setNotice(
+                                                "Customer deleted successfully.",
+                                            );
+                                        } catch (e) {
+                                            setNotice(error(e));
+                                        } finally {
+                                            setDeleting(false);
+                                        }
+                                    }}
+                                >
+                                    {deleting
+                                        ? "Deleting…"
+                                        : "Confirm delete customer"}
+                                </button>
+                                <button
+                                    disabled={deleting}
+                                    onClick={() => setDeletingCustomer(null)}
+                                >
+                                    Cancel deletion
+                                </button>
+                            </section>
+                        )}
                         <div className="trade-card trade-table">
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>Customer</th>
+                                        <th>Customer / contact</th>
                                         <th>Related documents</th>
                                     </tr>
                                 </thead>
@@ -1594,6 +1729,12 @@ export default function Trade({
                                             <tr key={s.id}>
                                                 <td>
                                                     <strong>{s.name}</strong>
+                                                    <small>
+                                                        {s.email || "No email"}
+                                                    </small>
+                                                    <small>
+                                                        {s.phone || "No phone"}
+                                                    </small>
                                                 </td>
                                                 <td>
                                                     <button
@@ -1606,6 +1747,47 @@ export default function Trade({
                                                     >
                                                         View customer documents
                                                     </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setViewingCustomer(
+                                                                s,
+                                                            );
+                                                            setEditingCustomer(
+                                                                null,
+                                                            );
+                                                        }}
+                                                    >
+                                                        View customer
+                                                    </button>
+                                                    {can("sales.quote") && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingCustomer(
+                                                                    s,
+                                                                );
+                                                                setViewingCustomer(
+                                                                    null,
+                                                                );
+                                                                setDeletingCustomer(
+                                                                    null,
+                                                                );
+                                                            }}
+                                                        >
+                                                            Edit customer
+                                                        </button>
+                                                    )}
+                                                    {can("sales.configure") && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setDeletingCustomer(
+                                                                    s,
+                                                                );
+                                                                setNotice("");
+                                                            }}
+                                                        >
+                                                            Delete customer
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}

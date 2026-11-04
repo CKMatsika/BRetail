@@ -28,6 +28,8 @@ final class Suppliers
                 'terms_days' => 'required|integer|min:0|max:365',
                 'active' => 'required|boolean',
             ])->validate();
+            $data['name'] = trim($data['name']);
+            app(PartyDuplicates::class)->ensureUnique(Supplier::class, $data, $id ? $supplier : null);
             $supplier->fill($data)->save();
             Audit::record('purchasing.supplier_saved', (string) $supplier->id);
 

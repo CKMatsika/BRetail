@@ -658,3 +658,117 @@ test("invoice editing saves under the same number without creating a quotation, 
         page.getByText("No quotations found", { exact: true }),
     ).toBeVisible();
 });
+
+test("customer directory supports viewing, editing and confirming deletion and displays duplicate save errors", async ({
+    page,
+}, info) => {
+    const data = workspaceFixture();
+    data.customers = [
+        {
+            id: 1,
+            name: "Hande High School",
+            email: "office@hande.test",
+            phone: "0771234567",
+        },
+        { id: 2, name: "Beacon Academy", email: null, phone: null },
+    ] as any;
+    const requests: string[] = [];
+    await page.route("**/workspace-test", (route) =>
+        route.fulfill({
+            contentType: "text/html",
+            body: `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{padding:20px;font-family:Arial;color:#243c32;background:#f6f8f6}*{box-sizing:border-box}${styles}</style><div id="root"></div><script>window.tradeSection='sales';window.tradeFixture=${JSON.stringify(data)}</script><script>${bundle.replaceAll("</script", "<\\/script")}</script>`,
+        }),
+    );
+    await page.route("**/trade/**", async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        const method = route.request().method();
+        if (method === "GET") return route.fulfill({ json: { data } });
+        requests.push(`${method} ${path}`);
+        if (method === "PATCH" && path === "/trade/customers/1") {
+            data.customers[0] = {
+                ...data.customers[0],
+                ...route.request().postDataJSON(),
+            };
+            return route.fulfill({ json: { data: data.customers[0] } });
+        }
+        if (method === "DELETE" && path === "/trade/customers/2") {
+            data.customers = data.customers.filter((c) => c.id !== 2);
+            return route.fulfill({ json: { message: "Customer deleted." } });
+        }
+        if (method === "POST" && path === "/trade/customers")
+            return route.fulfill({
+                status: 422,
+                json: {
+                    errors: {
+                        name: [
+                            "A matching or very similar record already exists: Hande High School (ID 1). Open that record instead, or correct the details.",
+                        ],
+                    },
+                },
+            });
+        throw new Error(`Unexpected request ${method} ${path}`);
+    });
+    await page.goto("/workspace-test");
+    const hande = () =>
+        page.getByRole("row").filter({ hasText: "Hande High School" });
+    await hande()
+        .getByRole("button", { name: "View customer", exact: true })
+        .click();
+    await expect(
+        page.getByRole("region", { name: "Customer details" }),
+    ).toContainText("office@hande.test");
+    await hande()
+        .getByRole("button", { name: "Edit customer", exact: true })
+        .click();
+    await page
+        .getByLabel("Customer email", { exact: true })
+        .fill("accounts@hande.test");
+    await page
+        .getByRole("button", { name: "Save customer changes", exact: true })
+        .click();
+    await expect(hande()).toContainText("accounts@hande.test");
+    await page
+        .getByRole("row")
+        .filter({ hasText: "Beacon Academy" })
+        .getByRole("button", { name: "Delete customer", exact: true })
+        .click();
+    await expect(
+        page.getByRole("alertdialog", { name: "Confirm customer deletion" }),
+    ).toBeVisible();
+    expect(requests).toEqual(["PATCH /trade/customers/1"]);
+    await page
+        .getByRole("button", { name: "Confirm delete customer", exact: true })
+        .click();
+    await expect(
+        page.getByRole("row").filter({ hasText: "Beacon Academy" }),
+    ).toHaveCount(0);
+    await page
+        .locator("summary")
+        .filter({ hasText: "+ Create customer" })
+        .click();
+    const create = page
+        .locator("form")
+        .filter({
+            has: page.getByRole("heading", {
+                name: "Create customer",
+                exact: true,
+            }),
+        });
+    await create
+        .getByLabel("Customer name", { exact: true })
+        .fill("Hande High Scool");
+    await create.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(create.getByRole("status")).toContainText(
+        "A matching or very similar record already exists",
+    );
+    expect(data.customers).toHaveLength(1);
+    await page.screenshot({
+        path: `test-results/customer-crud-${info.project.name}.png`,
+        fullPage: true,
+    });
+    expect(requests).toEqual([
+        "PATCH /trade/customers/1",
+        "DELETE /trade/customers/2",
+        "POST /trade/customers",
+    ]);
+});
