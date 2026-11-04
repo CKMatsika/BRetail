@@ -10,7 +10,7 @@ const styles = readFileSync("resources/css/app.css", "utf8").replace(
 test.beforeAll(async () => {
     const result = await build({
         stdin: {
-            contents: `import React from 'react';import {createRoot} from 'react-dom/client';import Inventory from './resources/js/pages/Inventory';import Pos from './resources/js/pages/Pos';const props=window.fixture;createRoot(document.getElementById('root')).render(window.fixtureKind==='pos'?<Pos pos={props} permissions={['*']}/>:<Inventory {...props}/>);`,
+            contents: `import React from 'react';import {createRoot} from 'react-dom/client';import Inventory from './resources/js/pages/Inventory';import Pos from './resources/js/pages/Pos';import {createInertiaApp} from '@inertiajs/react';const props=window.fixture;if(window.inertiaFixture){createInertiaApp({id:'root',page:window.inertiaFixture,resolve:()=>Inventory,setup({el,App,props}){createRoot(el).render(<App {...props}/>);}});}else{createRoot(document.getElementById('root')).render(window.fixtureKind==='pos'?<Pos pos={props} permissions={['*']}/>:<Inventory {...props}/>);}`,
             resolveDir: process.cwd(),
             loader: "tsx",
         },
@@ -211,5 +211,125 @@ test("POS allows a service with no stock while blocking an unstocked physical pr
         path: `test-results/service-pos-${info.project.name}.png`,
         fullPage: true,
     });
+    expect(errors).toEqual([]);
+});
+
+test("editing an item with empty server attributes saves its service type and variant, and displays real validation errors", async ({
+    page,
+}) => {
+    const item = {
+        ...product(1, "ERP licence", "stock"),
+        attributes: [] as Record<string, string> | [],
+        variants: [
+            {
+                ...variant(1, "ERP"),
+                attributes: [] as Record<string, string> | [],
+            },
+        ],
+    };
+    const data = {
+        permissions: ["*"],
+        branches: [{ id: 1, name: "Main" }],
+        baseCurrency: "USD",
+        warehouses: [{ id: 1, name: "Main", branch_id: 1 }],
+        classifications: [],
+        products: [item],
+        balances: [],
+        counts: [],
+        movements: [],
+        errors: {} as Record<string, string>,
+    };
+    const inertiaPage = () => ({
+        component: "Inventory",
+        props: data,
+        url: "/attributes-ui",
+        version: null,
+        clearHistory: false,
+        encryptHistory: false,
+    });
+    await page.route("**/attributes-ui", (route) =>
+        route.fulfill({
+            contentType: "text/html",
+            body: `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{--surface:#fff;--muted:#78847e;--line:#dce5df}${styles}</style><div id="root"></div><script>window.inertiaFixture=${JSON.stringify(inertiaPage())}</script><script>${bundle.replaceAll("</script", "<\\/script")}</script>`,
+        }),
+    );
+    let saves = 0;
+    await page.route("**/inventory/products/1", async (route) => {
+        expect(route.request().method()).toBe("PATCH");
+        const body = route.request().postDataJSON();
+        expect(body.attributes).toEqual({});
+        saves++;
+        if (saves === 1) {
+            expect(body.item_type).toBe("service");
+            item.item_type = "service";
+        } else
+            data.errors = {
+                item_type:
+                    "This item already has posted sales. Create a separate item to preserve its history.",
+            };
+        await route.fulfill({
+            json: inertiaPage(),
+            headers: { "X-Inertia": "true" },
+        });
+    });
+    let variantSaves = 0;
+    await page.route("**/inventory/products/1/variants/1", async (route) => {
+        const body = route.request().postDataJSON();
+        expect(route.request().method()).toBe("PATCH");
+        expect(body.attributes).toEqual(
+            variantSaves === 0 ? {} : { Licence: "Annual" },
+        );
+        item.variants[0].attributes = body.attributes;
+        variantSaves++;
+        await route.fulfill({
+            json: inertiaPage(),
+            headers: { "X-Inertia": "true" },
+        });
+    });
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/attributes-ui");
+    await page
+        .getByRole("button", { name: "Edit product", exact: true })
+        .click();
+    await page.getByLabel("Item type").selectOption("service");
+    await page
+        .getByRole("button", { name: "Save product", exact: true })
+        .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(saves).toBe(1);
+    await page
+        .getByRole("button", { name: "Edit variant", exact: true })
+        .click();
+    await page
+        .getByRole("button", { name: "Save variant", exact: true })
+        .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(variantSaves).toBe(1);
+    await page
+        .getByRole("button", { name: "Edit variant", exact: true })
+        .click();
+    await page.getByLabel("Attribute name", { exact: true }).fill("Licence");
+    await page.getByLabel("Attribute value", { exact: true }).fill("Annual");
+    await page
+        .getByRole("button", { name: "Save variant", exact: true })
+        .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(variantSaves).toBe(2);
+    await page
+        .getByRole("button", { name: "Edit product", exact: true })
+        .click();
+    await page.getByLabel("Item type").selectOption("stock");
+    await page
+        .getByRole("button", { name: "Save product", exact: true })
+        .click();
+    await expect(page.getByRole("alert")).toContainText(
+        "This item already has posted sales",
+    );
+    await expect(
+        page.getByText("Custom attributes must be a JSON object.", {
+            exact: true,
+        }),
+    ).toHaveCount(0);
     expect(errors).toEqual([]);
 });

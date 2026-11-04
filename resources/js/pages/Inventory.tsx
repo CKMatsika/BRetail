@@ -16,7 +16,7 @@ type Variant = {
     minimum_stock: string;
     maximum_stock: string | null;
     active: boolean;
-    attributes: Record<string, string>;
+    attributes: Record<string, string> | [];
 };
 type Product = {
     item_type?: "stock" | "service";
@@ -31,7 +31,7 @@ type Product = {
     category_id: number | null;
     subcategory_id: number | null;
     active: boolean;
-    attributes: Record<string, string>;
+    attributes: Record<string, string> | [];
     variants: Variant[];
 };
 type Classification = {
@@ -115,6 +115,11 @@ function Errors({ errors }: { errors: Record<string, string> }) {
         </div>
     ) : null;
 }
+// Laravel serializes an empty attributes array as []; the editor uses a name/value object.
+const attributesForForm = (
+    value: Record<string, string> | [] | null | undefined,
+): Record<string, string> => Object.fromEntries(Object.entries(value ?? {}));
+
 function ProductForm({
     product,
     classes,
@@ -135,33 +140,19 @@ function ProductForm({
         department_id: product?.department_id ?? "",
         category_id: product?.category_id ?? "",
         subcategory_id: product?.subcategory_id ?? "",
-        attributes: product?.attributes ?? {},
+        attributes: attributesForForm(product?.attributes),
         active: product?.active ?? true,
     });
-    const [attributes, setAttributes] = useState(
-        JSON.stringify(product?.attributes ?? {}),
-    );
-    const [error, setError] = useState("");
     return (
         <Modal title={product ? "Edit product" : "New product"} close={close}>
             <form
                 onSubmit={(e) => {
                     e.preventDefault();
-                    try {
-                        const a = JSON.parse(attributes);
-                        if (!a || Array.isArray(a) || typeof a !== "object")
-                            throw Error();
-                        f.transform((d) => ({ ...d, attributes: a }));
-                        product
-                            ? f.patch("/inventory/products/" + product.id, {
-                                  onSuccess: close,
-                              })
-                            : f.post("/inventory/products", {
-                                  onSuccess: close,
-                              });
-                    } catch {
-                        setError("Custom attributes must be a JSON object.");
-                    }
+                    product
+                        ? f.patch("/inventory/products/" + product.id, {
+                              onSuccess: close,
+                          })
+                        : f.post("/inventory/products", { onSuccess: close });
                 }}
             >
                 <label className="field">
@@ -276,8 +267,8 @@ function ProductForm({
                     </label>
                 </div>
                 <AttributeEditor
-                    initial={product?.attributes ?? {}}
-                    onChange={(value) => setAttributes(JSON.stringify(value))}
+                    initial={attributesForForm(product?.attributes)}
+                    onChange={(value) => f.setData("attributes", value)}
                 />
                 <label className="checkbox">
                     <input
@@ -288,7 +279,6 @@ function ProductForm({
                     Active product
                 </label>
                 <Errors errors={f.errors} />
-                {error && <p className="error">{error}</p>}
                 <p className="muted">
                     After saving, add a SKU and selling price. Services can be
                     invoiced immediately; physical items require stock.
@@ -320,10 +310,8 @@ function VariantForm({
         minimum_stock: variant?.minimum_stock ?? "0",
         maximum_stock: variant?.maximum_stock ?? "",
         active: variant?.active ?? true,
-        attributes: variant?.attributes ?? {},
+        attributes: attributesForForm(variant?.attributes),
     });
-    const [a, setA] = useState(JSON.stringify(variant?.attributes ?? {}));
-    const [error, setError] = useState("");
     return (
         <Modal title={variant ? "Edit variant" : "Add variant"} close={close}>
             <p className="muted">
@@ -333,30 +321,16 @@ function VariantForm({
             <form
                 onSubmit={(e) => {
                     e.preventDefault();
-                    try {
-                        const attrs = JSON.parse(a);
-                        if (
-                            !attrs ||
-                            Array.isArray(attrs) ||
-                            typeof attrs !== "object"
-                        )
-                            throw Error();
-                        f.transform((d) => ({
-                            ...d,
-                            barcode: d.barcode || null,
-                            maximum_stock: d.maximum_stock || null,
-                            attributes: attrs,
-                        }));
-                        const url =
-                            "/inventory/products/" + product.id + "/variants";
-                        variant
-                            ? f.patch(url + "/" + variant.id, {
-                                  onSuccess: close,
-                              })
-                            : f.post(url, { onSuccess: close });
-                    } catch {
-                        setError("Attributes must be a JSON object.");
-                    }
+                    f.transform((d) => ({
+                        ...d,
+                        barcode: d.barcode || null,
+                        maximum_stock: d.maximum_stock || null,
+                    }));
+                    const url =
+                        "/inventory/products/" + product.id + "/variants";
+                    variant
+                        ? f.patch(url + "/" + variant.id, { onSuccess: close })
+                        : f.post(url, { onSuccess: close });
                 }}
             >
                 <div className="form-grid">
@@ -396,8 +370,8 @@ function VariantForm({
                         ))}
                 </div>
                 <AttributeEditor
-                    initial={variant?.attributes ?? {}}
-                    onChange={(value) => setA(JSON.stringify(value))}
+                    initial={attributesForForm(variant?.attributes)}
+                    onChange={(value) => f.setData("attributes", value)}
                 />
                 <label className="checkbox">
                     <input
@@ -408,7 +382,6 @@ function VariantForm({
                     Active variant
                 </label>
                 <Errors errors={f.errors} />
-                {error && <p className="error">{error}</p>}
                 <button className="primary" disabled={f.processing}>
                     Save variant
                 </button>
