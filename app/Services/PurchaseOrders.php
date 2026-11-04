@@ -62,6 +62,9 @@ final class PurchaseOrders
                     throw ValidationException::withMessages(['items' => 'Choose active products and positive quantities.']);
                 }
                 $quantity = BigDecimal::of($item['quantity'])->toScale(3);
+                if ($v->product->item_type === 'service') {
+                    throw ValidationException::withMessages(['items' => 'Goods purchase orders require physical stock items. Services cannot be received into stock.']);
+                }
                 $originalCost = BigDecimal::of($item['unit_cost'])->toScale(4);
                 $originalTotal = $originalTotal->plus($quantity->multipliedBy($originalCost)->toScale(4, RoundingMode::HalfUp));
                 $items[] = [...$item, 'quantity' => (string) $quantity, 'unit_cost' => (string) $originalCost, 'sku' => $v->sku, 'description' => $v->product->name.' / '.$v->name];

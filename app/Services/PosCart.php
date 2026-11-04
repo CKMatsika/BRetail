@@ -54,7 +54,7 @@ final class PosCart
             };
             $values = PosMath::line($line['quantity'], $v->selling_price, $line['discount_percent'], $taxRate);
             $balance = StockBalance::where('warehouse_id', $d['warehouse_id'])->where('variant_id', $v->id)->first();
-            if ($quantity->isGreaterThan($balance?->quantity ?? '0')) {
+            if ($v->product->item_type !== 'service' && $quantity->isGreaterThan($balance?->quantity ?? '0')) {
                 throw ValidationException::withMessages(['stock' => 'Insufficient stock for '.$v->sku.'. Review the quantity.']);
             }
             $items[] = [...$line, 'description' => mb_substr($v->product->name.' — '.$v->name, 0, 255), 'sku' => $v->sku, 'unit_price' => $v->selling_price, 'tax_rate' => (string) BigDecimal::of($taxRate)->toScale(4), ...$values];

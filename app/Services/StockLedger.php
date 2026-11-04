@@ -102,6 +102,12 @@ final class StockLedger
                 if ($quantity->isZero()) {
                     throw ValidationException::withMessages(['lines' => 'Movement quantities must be nonzero.']);
                 }
+                if ($variant->product->item_type === 'service') {
+                    if (! in_array($operation, ['sale', 'return', 'trade_sale', 'trade_return'], true)) {
+                        throw ValidationException::withMessages(['lines' => 'Services do not hold stock. Use a physical stock item for receipts, adjustments and transfers.']);
+                    }
+                    continue;
+                }
                 $balance = StockBalance::firstOrCreate(['variant_id' => $variant->id, 'warehouse_id' => $d['warehouse_id']], ['quantity' => '0.000', 'value' => '0.0000', 'average_cost' => '0.0000']);
                 $oldQty = BigDecimal::of($balance->quantity);
                 $oldValue = BigDecimal::of($balance->value);

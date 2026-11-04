@@ -19,6 +19,7 @@ type Variant = {
     attributes: Record<string, string>;
 };
 type Product = {
+    item_type?: "stock" | "service";
     id: number;
     name: string;
     description: string | null;
@@ -124,6 +125,7 @@ function ProductForm({
     close: () => void;
 }) {
     const f = useForm({
+        item_type: product?.item_type ?? "stock",
         name: product?.name ?? "",
         description: product?.description ?? "",
         brand: product?.brand ?? "",
@@ -162,6 +164,26 @@ function ProductForm({
                     }
                 }}
             >
+                <label className="field">
+                    Item type
+                    <select
+                        value={f.data.item_type}
+                        onChange={(e) =>
+                            f.setData(
+                                "item_type",
+                                e.target.value as "stock" | "service",
+                            )
+                        }
+                    >
+                        <option value="stock">Physical stock</option>
+                        <option value="service">Service</option>
+                    </select>
+                    <small className="muted">
+                        {f.data.item_type === "service"
+                            ? "For software, licences, consulting and other services. No stock balance or opening stock is required to invoice."
+                            : "Quantities are tracked by warehouse. Stock is required before selling."}
+                    </small>
+                </label>
                 <div className="form-grid">
                     {(["name", "brand", "unit", "tax_class"] as const).map(
                         (k) => (
@@ -268,7 +290,8 @@ function ProductForm({
                 <Errors errors={f.errors} />
                 {error && <p className="error">{error}</p>}
                 <p className="muted">
-                    After saving, add the product's individual SKU variants.
+                    After saving, add a SKU and selling price. Services can be
+                    invoiced immediately; physical items require stock.
                 </p>
                 <button className="primary" disabled={f.processing}>
                     Save product
@@ -349,15 +372,28 @@ function VariantForm({
                             "minimum_stock",
                             "maximum_stock",
                         ] as const
-                    ).map((k) => (
-                        <label className="field" key={k}>
-                            {k.replaceAll("_", " ")}
-                            <input
-                                value={f.data[k]}
-                                onChange={(e) => f.setData(k, e.target.value)}
-                            />
-                        </label>
-                    ))}
+                    )
+                        .filter(
+                            (k) =>
+                                product.item_type !== "service" ||
+                                ![
+                                    "cost_price",
+                                    "reorder_level",
+                                    "minimum_stock",
+                                    "maximum_stock",
+                                ].includes(k),
+                        )
+                        .map((k) => (
+                            <label className="field" key={k}>
+                                {k.replaceAll("_", " ")}
+                                <input
+                                    value={f.data[k]}
+                                    onChange={(e) =>
+                                        f.setData(k, e.target.value)
+                                    }
+                                />
+                            </label>
+                        ))}
                 </div>
                 <AttributeEditor
                     initial={variant?.attributes ?? {}}
@@ -822,7 +858,9 @@ export default function Inventory(
     const products = p.products ?? [],
         warehouses = p.warehouses ?? [],
         classes = p.classifications ?? [],
-        variants = products.flatMap((x) => x.variants),
+        variants = products
+            .filter((x) => x.item_type !== "service")
+            .flatMap((x) => x.variants),
         balances = p.balances ?? [];
     const can = (s: string) =>
         p.permissions.includes("*") || p.permissions.includes(s);
@@ -855,8 +893,11 @@ export default function Inventory(
             </div>
             <div className="stat-grid">
                 {[
-                    { label: "Products", value: products.length },
-                    { label: "SKU variants", value: variants.length },
+                    { label: "Products & services", value: products.length },
+                    {
+                        label: "SKU variants",
+                        value: products.flatMap((x) => x.variants).length,
+                    },
                     { label: "Warehouses", value: warehouses.length },
                     {
                         label: "Open counts",
@@ -875,10 +916,10 @@ export default function Inventory(
                 <section className="panel">
                     <div className="section-heading">
                         <div>
-                            <h2>Your product catalogue</h2>
+                            <h2>Products & services catalogue</h2>
                             <p className="muted">
-                                One product. Every size, colour and
-                                specification.
+                                Physical products and services, with a SKU and
+                                selling price for each option.
                             </p>
                         </div>
                         <div className="inventory-actions">
@@ -945,6 +986,13 @@ export default function Inventory(
                                     <div>
                                         <h3>
                                             {product.name}
+                                            <span className="muted">
+                                                {" "}
+                                                ·{" "}
+                                                {product.item_type === "service"
+                                                    ? "Service"
+                                                    : "Physical stock"}
+                                            </span>
                                             {!product.active
                                                 ? " · Inactive"
                                                 : ""}
@@ -1046,7 +1094,10 @@ export default function Inventory(
                                                             {v.selling_price}
                                                         </td>
                                                         <td>
-                                                            {v.reorder_level}
+                                                            {product.item_type ===
+                                                            "service"
+                                                                ? "Not applicable"
+                                                                : v.reorder_level}
                                                         </td>
                                                         <td>
                                                             {can(
@@ -1075,8 +1126,8 @@ export default function Inventory(
                                     </div>
                                 ) : (
                                     <p className="notice">
-                                        Add a SKU variant before recording
-                                        stock.
+                                        Add a SKU and selling price before
+                                        selling this item.
                                     </p>
                                 )}
                             </article>
@@ -1369,9 +1420,10 @@ export default function Inventory(
                                     </select>
                                 </label>
                                 <small className="muted">
-                                    Leave empty for all active variants. For
-                                    large catalogues, count up to 2000 variants
-                                    at a time.
+                                    Leave empty for all active physical stock
+                                    variants. Services are excluded. For large
+                                    catalogues, count up to 2000 variants at a
+                                    time.
                                 </small>
                             </details>
                             <Errors errors={start.errors} />

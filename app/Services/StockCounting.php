@@ -27,13 +27,13 @@ final class StockCounting
             if (StockCount::where('warehouse_id', $d['warehouse_id'])->where('status', 'draft')->exists()) {
                 throw ValidationException::withMessages(['warehouse_id' => 'Finish or cancel the existing count for this warehouse.']);
             }
-            $query = ProductVariant::where('active', true)->whereHas('product', fn ($q) => $q->where('active', true));
+            $query = ProductVariant::where('active', true)->whereHas('product', fn ($q) => $q->where('active', true)->where('item_type', 'stock'));
             if (! empty($d['variant_ids'])) {
                 $query->whereIn('id', $d['variant_ids']);
             }
             $variants = $query->get();
             if (! empty($d['variant_ids']) && $variants->count() !== count($d['variant_ids'])) {
-                throw ValidationException::withMessages(['variant_ids' => 'Select active variants belonging to this company.']);
+                throw ValidationException::withMessages(['variant_ids' => 'Select active physical stock variants belonging to this company.']);
             }
             if ($variants->isEmpty() || $variants->count() > 2000) {
                 throw ValidationException::withMessages(['warehouse_id' => 'Select 1–2000 active variants for each count. Split larger catalogues into separate counts.']);

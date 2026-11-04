@@ -34,7 +34,7 @@ test("inventory catalogue, opening stock, adjustment, count and CSV export", asy
     await expect(page.getByText("Module preference saved.")).toBeVisible();
     await navigate("Inventory");
     await expect(
-        page.getByRole("heading", { name: "Your product catalogue" }),
+        page.getByRole("heading", { name: "Products & services catalogue" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Setup", exact: true }).click();
     await page

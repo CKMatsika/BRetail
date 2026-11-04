@@ -51,6 +51,7 @@ class InventoryTest extends TestCase
     {
         $u = app(Onboarding::class)->register(['name' => 'Owner', 'email' => $email, 'password' => 'SecurePassword123', 'company_name' => 'Inventory Shop', 'industry' => 'apparel', 'base_currency' => 'USD', 'branch_name' => 'Harare', 'branch_code' => 'HRE', 'warehouse_name' => 'Harare warehouse']);
         TenantModule::where('key', 'inventory')->update(['enabled' => true]);
+        DB::table('tenant_subscriptions')->where('tenant_id', $u->tenant_id)->update(['status' => 'active']);
 
         return $u;
     }

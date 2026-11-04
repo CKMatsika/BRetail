@@ -4,10 +4,15 @@ namespace App\Services;
 
 use App\Models\Branch;
 use App\Models\Classification;
+use App\Models\PosSaleItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\PurchaseOrder;
+use App\Models\StockCountLine;
+use App\Models\StockMovement;
 use App\Models\Tenant;
 use App\Models\TenantModule;
+use App\Models\TradeDocument;
 use App\Models\User;
 use App\Models\Warehouse;
 use Brick\Math\BigDecimal;
@@ -47,7 +52,7 @@ final class Catalog
     public function product(User $user, array $input, ?Product $product = null): Product
     {
         InventoryAccess::permit($user, 'inventory.configure');
-        $d = Validator::make($input, ['name' => 'required|string|max:160', 'description' => 'nullable|string|max:5000', 'department_id' => 'nullable|integer', 'category_id' => 'nullable|integer', 'subcategory_id' => 'nullable|integer', 'brand' => 'nullable|string|max:120', 'unit' => 'required|string|max:30', 'tax_class' => 'required|string|max:60', 'warranty_months' => 'required|integer|between:0,240', 'attributes' => 'present|array|max:30', 'attributes.*' => 'nullable|string|max:255', 'active' => 'required|boolean'])->validate();
+        $d = Validator::make($input, ['item_type' => ['sometimes', 'required', Rule::in(['stock', 'service'])], 'name' => 'required|string|max:160', 'description' => 'nullable|string|max:5000', 'department_id' => 'nullable|integer', 'category_id' => 'nullable|integer', 'subcategory_id' => 'nullable|integer', 'brand' => 'nullable|string|max:120', 'unit' => 'required|string|max:30', 'tax_class' => 'required|string|max:60', 'warranty_months' => 'required|integer|between:0,240', 'attributes' => 'present|array|max:30', 'attributes.*' => 'nullable|string|max:255', 'active' => 'required|boolean'])->validate();
 
         return DB::transaction(function () use ($d, $product) {
             $this->lock();
@@ -60,6 +65,20 @@ final class Catalog
                 }$previous = $c?->id;
             }
             $p = $product ?? new Product;
+            $product?->refresh();
+            $itemType = $d['item_type'] ?? $product?->item_type ?? 'stock';
+            if ($product && $product->item_type !== $itemType) {
+                $ids = $product->variants()->pluck('id');
+                $used = StockMovement::whereIn('variant_id', $ids)->exists()
+                    || PosSaleItem::whereIn('variant_id', $ids)->exists()
+                    || StockCountLine::whereIn('variant_id', $ids)->exists()
+                    || TradeDocument::where('kind', 'invoice')->get(['items'])->contains(fn ($doc) => collect($doc->items)->contains(fn ($i) => $ids->contains($i['variant_id'])))
+                    || PurchaseOrder::get(['items'])->contains(fn ($doc) => collect($doc->items)->contains(fn ($i) => $ids->contains($i['variant_id'])));
+                if ($used) {
+                    throw ValidationException::withMessages(['item_type' => 'This item already has stock, orders, counts or posted sales. Create a separate service or physical item to preserve its history.']);
+                }
+            }
+            $d['item_type'] = $itemType;
             $p->fill($d);
             $p->save();
             Audit::record($product ? 'product.updated' : 'product.created', (string) $p->id);

@@ -71,7 +71,7 @@ final class PosSales
             $stock = app(StockLedger::class)->sale($user, ['request_id' => $meta['request_id'], 'warehouse_id' => $session->warehouse_id, 'type' => 'sale', 'reference' => $number, 'reason' => $mode === 'live' ? 'POS sale' : 'Training POS sale', 'lines' => array_map(fn ($l) => ['variant_id' => $l['variant_id'], 'quantity' => (string) BigDecimal::of($l['quantity'])->negated()], $quote['items'])]);
             $costs = $stock->movements->keyBy('variant_id');
             foreach ($quote['items'] as $item) {
-                PosSaleItem::create([...$item, 'sale_id' => $sale->id, 'cost_value' => (string) BigDecimal::of($costs[$item['variant_id']]->value)->negated()]);
+                PosSaleItem::create([...$item, 'sale_id' => $sale->id, 'cost_value' => (string) BigDecimal::of($costs->get($item['variant_id'])?->value ?? '0')->negated()]);
             }
             foreach ($payments as $p) {
                 PosPayment::create(['sale_id' => $sale->id, 'method' => $p['method'], 'amount' => PosMath::money(BigDecimal::of($p['amount'])->minus($p['method'] === 'cash' ? $change : '0')), 'tendered' => $p['amount'], 'change' => $p['method'] === 'cash' ? PosMath::money($change) : '0.00', 'reference' => $p['reference']]);

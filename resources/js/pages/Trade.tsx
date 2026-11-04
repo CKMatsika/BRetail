@@ -72,6 +72,7 @@ export type TradeData = {
     orders: Doc[];
     documents: Doc[];
     variants: {
+        product?: { item_type?: "stock" | "service" };
         id: number;
         sku: string;
         name: string;
@@ -382,6 +383,10 @@ export default function Trade({
                 : initial.sales
                   ? "sales"
                   : "purchasing";
+    const initialVariant = initial.variants.find(
+        (v) =>
+            initialArea !== "purchasing" || v.product?.item_type !== "service",
+    );
     const [area, setArea] = useState(initialArea);
     const [party, setParty] = useState("");
     const [search, setSearch] = useState("");
@@ -399,10 +404,10 @@ export default function Trade({
     const [preview, setPreview] = useState<PreviewData | null>(null);
     const [items, setItems] = useState<Item[]>([
         {
-            variant_id: initial.variants[0]?.id ?? 0,
+            variant_id: initialVariant?.id ?? 0,
             quantity: "1",
             unit_cost: "0",
-            unit_price: initial.variants[0]?.selling_price ?? "0",
+            unit_price: initialVariant?.selling_price ?? "0",
             discount_percent: "0",
         },
     ]);
@@ -503,12 +508,15 @@ export default function Trade({
         setPreview(null);
         setNotice("");
         setDocumentStatus("all");
+        const firstVariant = d.variants.find(
+            (v) => next !== "orders" || v.product?.item_type !== "service",
+        );
         setItems([
             {
-                variant_id: d.variants[0]?.id ?? 0,
+                variant_id: firstVariant?.id ?? 0,
                 quantity: "1",
                 unit_cost: "0",
-                unit_price: d.variants[0]?.selling_price ?? "0",
+                unit_price: firstVariant?.selling_price ?? "0",
                 discount_percent: "0",
             },
         ]);
@@ -675,11 +683,26 @@ export default function Trade({
                                                 )
                                             }
                                         >
-                                            {d.variants.map((v) => (
-                                                <option key={v.id} value={v.id}>
-                                                    {v.sku} {v.name}
-                                                </option>
-                                            ))}
+                                            {d.variants
+                                                .filter(
+                                                    (v) =>
+                                                        kind !== "cost" ||
+                                                        v.product?.item_type !==
+                                                            "service",
+                                                )
+                                                .map((v) => (
+                                                    <option
+                                                        key={v.id}
+                                                        value={v.id}
+                                                    >
+                                                        {v.sku} {v.name}
+                                                        {v.product
+                                                            ?.item_type ===
+                                                        "service"
+                                                            ? " · Service"
+                                                            : ""}
+                                                    </option>
+                                                ))}
                                         </select>
                                     )}
                                 </td>
@@ -790,10 +813,20 @@ export default function Trade({
                         setItems([
                             ...items,
                             {
-                                variant_id: d.variants[0]?.id ?? 0,
+                                variant_id:
+                                    d.variants.find(
+                                        (v) =>
+                                            kind !== "cost" ||
+                                            v.product?.item_type !== "service",
+                                    )?.id ?? 0,
                                 quantity: "1",
                                 unit_cost: "0",
-                                unit_price: d.variants[0]?.selling_price ?? "0",
+                                unit_price:
+                                    d.variants.find(
+                                        (v) =>
+                                            kind !== "cost" ||
+                                            v.product?.item_type !== "service",
+                                    )?.selling_price ?? "0",
                                 discount_percent: "0",
                             },
                         ]);
@@ -1727,7 +1760,8 @@ export default function Trade({
                                 }
                             >
                                 <p>
-                                    Quotes do not reserve stock. Select whether
+                                    Quotes do not reserve stock. Services can be
+                                    invoiced without stock. Select whether
                                     entered prices include VAT. Credit and
                                     available stock are checked when invoicing.
                                 </p>
@@ -1830,11 +1864,11 @@ export default function Trade({
                                 button="Accept quote and post credit invoice"
                             >
                                 <p>
-                                    Confirm customer acceptance. Posting
-                                    consumes stock and increases customer credit
-                                    outstanding. This preview is not a posted
-                                    invoice; stock, credit and expiry are
-                                    checked on posting.
+                                    Confirm customer acceptance. Posting reduces
+                                    physical stock and increases customer credit
+                                    outstanding. Services require no stock. This
+                                    preview is not a posted invoice; stock,
+                                    credit and expiry are checked on posting.
                                 </p>
                                 <DocumentPreview
                                     logoUrl={d.company_logo_url}
@@ -2049,8 +2083,9 @@ export default function Trade({
                         button="Post credit return"
                     >
                         <p>
-                            Returns reduce unpaid credit and restore original
-                            stock cost. This workflow does not issue cash
+                            Returns reduce unpaid credit. Physical items return
+                            to stock at their original cost; service credits do
+                            not affect stock. This workflow does not issue cash
                             refunds for paid invoices.
                         </p>
                         {lines("quantity")}

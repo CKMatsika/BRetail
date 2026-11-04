@@ -21,6 +21,7 @@ import {
 import {CurrencyDrawerPanel,CurrencyTenderFields,CurrencyRefundFields,CurrencyDrawer} from "./CurrencyPos";
 import { useDialog } from "../useDialog";
 type Variant = {
+    item_type?: "stock" | "service";
     id: number;
     name: string;
     product_name: string;
@@ -836,7 +837,7 @@ export default function Pos({
             ?.quantity ?? "0.000";
     const add = (v: Variant) => {
         if (pending || !can("pos.sell")) return;
-        if (scaled(available(v.id), 3) <= 0n) {
+        if (v.item_type !== "service" && scaled(available(v.id), 3) <= 0n) {
             setError("This product is out of stock in the selected warehouse.");
             return;
         }
@@ -1182,7 +1183,7 @@ export default function Pos({
                                     disabled={
                                         !can("pos.sell") ||
                                         !!pending ||
-                                        scaled(available(v.id), 3) <= 0n
+                                        (v.item_type !== "service" && scaled(available(v.id), 3) <= 0n)
                                     }
                                     onClick={() => add(v)}
                                 >
@@ -1206,7 +1207,7 @@ export default function Pos({
                                                 {p.currency} {v.selling_price}
                                             </b>
                                             <small>
-                                                {available(v.id)} in stock
+                                                {v.item_type === "service" ? "Service · no stock required" : `${available(v.id)} in stock`}
                                             </small>
                                         </div>
                                     </div>
@@ -1218,8 +1219,7 @@ export default function Pos({
                                 <ShoppingBag size={32} />
                                 <h3>No matching products</h3>
                                 <p className="muted">
-                                    Active variants with warehouse stock appear
-                                    here.
+                                    Active physical items and services appear here.
                                 </p>
                             </div>
                         )}

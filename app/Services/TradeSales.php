@@ -98,7 +98,7 @@ final class TradeSales
             }
             $stock = app(StockLedger::class)->trade($u, ['request_id' => $d['request_id'], 'warehouse_id' => $q->warehouse_id, 'type' => 'credit_sale', 'reference' => $q->number, 'reason' => 'Accepted credit quotation', 'lines' => array_map(fn ($i) => ['variant_id' => $i['variant_id'], 'quantity' => (string) BigDecimal::of($i['quantity'])->negated()], $q->items)]);
             $costs = $stock->movements->keyBy('variant_id');
-            $items = array_map(fn ($i) => [...$i, 'cost_value' => (string) BigDecimal::of($costs[$i['variant_id']]->value)->negated()], $q->items);
+            $items = array_map(fn ($i) => [...$i, 'cost_value' => (string) BigDecimal::of($costs->get($i['variant_id'])?->value ?? '0')->negated()], $q->items);
             $due = CarbonImmutable::parse($d['date'])->addDays($profile->terms_days)->toDateString();
             $doc = $t->document($u, 'invoice', ['request_id' => $d['request_id'], 'date' => $d['date'], 'due_on' => $due, 'reference' => $q->number, 'warehouse_id' => $q->warehouse_id, 'customer_id' => $q->customer_id, 'party_name' => $q->party_name, 'parent_id' => $q->id, 'currency_snapshot' => $q->currency_snapshot], $items, $q->net, $q->tax, $q->total, $payload);
             $l = app(AccountingLedger::class);

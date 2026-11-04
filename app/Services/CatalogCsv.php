@@ -23,7 +23,7 @@ final class CatalogCsv
             $header = fgetcsv($stream, null, ',', '"', '');
             if ($header) {
                 $header[0] = ltrim($header[0], "\xEF\xBB\xBF");
-            }if ($header !== self::HEADERS) {
+            }if ($header !== self::HEADERS && $header !== [...self::HEADERS, 'item_type']) {
                 throw ValidationException::withMessages(['file' => 'CSV headers must match the download template exactly.']);
             }
             $rows = [];
@@ -32,9 +32,9 @@ final class CatalogCsv
                 $number++;
                 if ($row === [null]) {
                     continue;
-                }if (count($row) !== count(self::HEADERS)) {
+                }if (count($row) !== count($header)) {
                     throw ValidationException::withMessages(['file' => "Row $number has the wrong number of columns."]);
-                }$rows[] = ['row' => $number, 'data' => array_combine(self::HEADERS, $row)];
+                }$rows[] = ['row' => $number, 'data' => array_combine($header, $row)];
                 if (count($rows) > 1000) {
                     throw ValidationException::withMessages(['file' => 'Import at most 1000 variants per file.']);
                 }
@@ -51,6 +51,9 @@ final class CatalogCsv
             $catalog->lock();
             foreach ($rows as $entry) {
                 $r = $entry['data'];
+                if (isset($r['item_type']) && ! in_array($r['item_type'], ['stock', 'service'], true)) {
+                    throw ValidationException::withMessages(['file' => 'Row '.$entry['row'].': item_type must be stock or service.']);
+                }
                 try {
                     $attributes = json_decode($r['attributes_json'] ?: '{}', true, 32, JSON_THROW_ON_ERROR);
                     if (! is_array($attributes)) {
@@ -74,8 +77,11 @@ final class CatalogCsv
                     if ($matches->count() > 1) {
                         throw ValidationException::withMessages(['product_name' => 'Ambiguous product name. Use the product editor.']);
                     }$product = $matches->first();
+                    if ($product && isset($r['item_type']) && $product->item_type !== $r['item_type']) {
+                        throw ValidationException::withMessages(['item_type' => 'Item type differs from the existing product. Use the product editor or a separate product name.']);
+                    }
                     if (! $product) {
-                        $product = $catalog->product($user, ['name' => $r['product_name'], 'brand' => $r['brand'] ?: null, 'unit' => $r['unit'] ?: 'each', 'tax_class' => 'standard', 'warranty_months' => 0, 'attributes' => [], 'active' => true, ...$classification]);
+                        $product = $catalog->product($user, ['item_type' => $r['item_type'] ?? 'stock', 'name' => $r['product_name'], 'brand' => $r['brand'] ?: null, 'unit' => $r['unit'] ?: 'each', 'tax_class' => 'standard', 'warranty_months' => 0, 'attributes' => [], 'active' => true, ...$classification]);
                     }
                     $catalog->variant($user, $product, ['name' => $r['variant_name'], 'sku' => $r['sku'], 'barcode' => $r['barcode'] ?: null, 'attributes' => $attributes, 'cost_price' => $r['cost_price'], 'selling_price' => $r['selling_price'], 'wholesale_price' => $r['wholesale_price'] ?: '0', 'reorder_level' => $r['reorder_level'] ?: '0', 'minimum_stock' => '0', 'maximum_stock' => null, 'active' => true]);
                 } catch (ValidationException $e) {
@@ -105,12 +111,12 @@ final class CatalogCsv
             $context->id = $user->tenant_id;
             try {
                 $out = fopen('php://output', 'w');
-                fputcsv($out, self::HEADERS, ',', '"', '');
+                fputcsv($out, [...self::HEADERS, 'item_type'], ',', '"', '');
                 if (! $template) {
                     $classes = Classification::get()->keyBy('id');
                     foreach (ProductVariant::with('product')->lazyById(100) as $v) {
                         $p = $v->product;
-                        $row = [$p->name, $v->name, $v->sku, $v->barcode ?? '', $classes->get($p->department_id)?->name ?? '', $classes->get($p->category_id)?->name ?? '', $classes->get($p->subcategory_id)?->name ?? '', $p->brand ?? '', $p->unit, $v->cost_price, $v->selling_price, $v->wholesale_price, $v->reorder_level, json_encode($v->attributes, JSON_THROW_ON_ERROR)];
+                        $row = [$p->name, $v->name, $v->sku, $v->barcode ?? '', $classes->get($p->department_id)?->name ?? '', $classes->get($p->category_id)?->name ?? '', $classes->get($p->subcategory_id)?->name ?? '', $p->brand ?? '', $p->unit, $v->cost_price, $v->selling_price, $v->wholesale_price, $v->reorder_level, json_encode($v->attributes, JSON_THROW_ON_ERROR), $p->item_type];
                         fputcsv($out, array_map(fn ($v) => self::safe((string) $v), $row), ',', '"', '');
                     }
                 }

@@ -53,7 +53,7 @@ class PosController
             'current_user_id' => $u->id,
             'daily' => app(PosReports::class)->daily($u, $filters['date'] ?? null),
             'warehouses' => $warehouses, 'departments' => Classification::where('level', 'department')->orderBy('name')->get(['id', 'name']),
-            'variants' => ProductVariant::with('product')->where('active', true)->whereHas('product', fn ($q) => $q->where('active', true))->orderBy('name')->get()->map(fn ($v) => [...$v->only('id', 'name', 'sku', 'barcode', 'selling_price', 'attributes'), 'product_name' => $v->product->name, 'department_id' => $v->product->department_id, 'brand' => $v->product->brand]),
+            'variants' => ProductVariant::with('product')->where('active', true)->whereHas('product', fn ($q) => $q->where('active', true))->orderBy('name')->get()->map(fn ($v) => [...$v->only('id', 'name', 'sku', 'barcode', 'selling_price', 'attributes'), 'item_type' => $v->product->item_type, 'product_name' => $v->product->name, 'department_id' => $v->product->department_id, 'brand' => $v->product->brand]),
             'stock' => StockBalance::whereIn('warehouse_id', $ids)->get(['warehouse_id', 'variant_id', 'quantity']),
             'loyalty_available' => $loyaltyAvailable,
             'customers' => PosCustomer::orderBy('name')->get(['id', 'name', 'email', 'phone', 'loyalty_number', 'loyalty_consent_at', 'loyalty_opted_out_at'])->map(fn ($customer) => [...$customer->only('id', 'name', 'email', 'phone', 'loyalty_number'), 'loyalty_enrolled' => $loyaltyAvailable && $customer->loyalty_consent_at !== null && $customer->loyalty_opted_out_at === null]),
