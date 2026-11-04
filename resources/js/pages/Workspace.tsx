@@ -97,8 +97,8 @@ const nav = [
     {key: "hr", label: "People & HR", icon: Users, permission: "hr.view"},
     {key: "payroll", label: "Payroll", icon: Activity, permission: "payroll.view"},
     {key: "currencies", label: "Currencies & transfers", icon: Building2, permission: "currencies.view"},
-    {key: "purchasing", label: "Purchasing", icon: Boxes, permission: "purchasing.view"},
-    {key: "sales", label: "Sales & credit", icon: ShoppingBag, permission: "sales.view"},
+    {key: "purchasing", label: "Procurement", icon: Boxes, permission: "purchasing.view"},
+    {key: "sales", label: "Customers & sales", icon: ShoppingBag, permission: "sales.view"},
     {key: "backoffice", label: "Back office", icon: Boxes, permission: "purchasing.view"},
     {
         key: "accounting",
@@ -1116,7 +1116,7 @@ export default function Workspace(p: Props) {
                     {p.section === "payroll" && p.payroll && <Payroll initial={p.payroll} />}
                     {p.section === "reports" && p.analytics && <Reports initial={p.analytics} permissions={p.permissions} />}
                     {p.section === "loyalty" && p.loyalty && <Loyalty initial={p.loyalty} />}
-                    {['purchasing','sales','backoffice'].includes(p.section) && p.trade && <Trade initial={p.trade} permissions={p.permissions} />}
+                    {['purchasing','sales','backoffice'].includes(p.section) && p.trade && <Trade key={p.section} section={p.section} initial={p.trade} permissions={p.permissions} onAreaChange={(area) => router.visit("/" + area)} showBackoffice={p.modules.some((m) => m.key === "backoffice" && m.enabled)} />}
                     {p.section === "inventory" && (
                         <Inventory
                             {...p}
