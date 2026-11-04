@@ -51,7 +51,7 @@ final class LoyaltyController
             'user' => $request->user()->only('id', 'name', 'email'),
             'role' => $request->user()->role->name,
             'permissions' => $request->user()->role->permissions,
-            'company' => [...$company->only('name', 'industry', 'base_currency', 'accepted_currencies'), 'settings' => []],
+            'company' => [...$company->only('name', 'industry', 'base_currency', 'accepted_currencies', 'logo_url'), 'settings' => []],
             'branches' => Branch::whereIn('id', $branchIds)->with('warehouses')->get(),
             'modules' => TenantModule::get()->map(fn ($module) => [...$module->toArray(), ...config('modules.'.$module->key)]),
         ]);

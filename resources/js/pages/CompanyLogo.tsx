@@ -1,19 +1,36 @@
 import React from "react";
 import { useForm } from "@inertiajs/react";
-export default function CompanyLogo() {
+export default function CompanyLogo({ logoUrl }: { logoUrl?: string | null }) {
     const f = useForm<{ logo: File | null }>({ logo: null });
     return (
         <form
             className="panel"
             onSubmit={(e) => {
                 e.preventDefault();
-                f.post("/company/logo", { forceFormData: true });
+                f.post("/company/logo", {
+                    forceFormData: true,
+                    onSuccess: () => f.reset("logo"),
+                });
             }}
         >
             <h2>Company logo</h2>
+            {logoUrl && (
+                <div style={{ margin: "16px 0" }}>
+                    <img
+                        src={logoUrl}
+                        alt="Saved company logo"
+                        style={{ width: 160, height: 80, objectFit: "contain" }}
+                    />
+                    <p className="muted">
+                        Saved to your company profile. It stays saved when you
+                        refresh or sign in again.
+                    </p>
+                </div>
+            )}
             <p className="muted">
-                PNG, JPEG, WebP, GIF or BMP. Maximum 2 MB and 4096 × 4096 pixels.
-                Logos are saved as PNG; animated GIFs use the first frame.
+                PNG, JPEG, WebP, GIF or BMP. Maximum 2 MB and 4096 × 4096
+                pixels. Logos are saved as PNG; animated GIFs use the first
+                frame.
             </p>
             <label className="field">
                 Upload logo

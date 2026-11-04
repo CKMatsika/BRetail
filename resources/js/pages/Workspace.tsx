@@ -1129,7 +1129,7 @@ export default function Workspace(p: Props) {
                                 company={p.company}
                                 editable={can("company.configure")}
                             />
-                            {can("company.configure") && <CompanyLogo />}
+                            {can("company.configure") && <CompanyLogo logoUrl={p.company.logo_url} />}
                         </>
                     )}
                     {p.section === "audit" && (

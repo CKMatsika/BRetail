@@ -22,7 +22,7 @@ final class ReportsController
             'user' => $request->user()->only('id', 'name', 'email'),
             'role' => $request->user()->role->name,
             'permissions' => $request->user()->role->permissions,
-            'company' => [...Company::firstOrFail()->only('name', 'industry', 'base_currency', 'accepted_currencies'), 'settings' => []],
+            'company' => [...Company::firstOrFail()->only('name', 'industry', 'base_currency', 'accepted_currencies', 'logo_url'), 'settings' => []],
             'branches' => $branches,
             'modules' => TenantModule::get()->map(fn ($module) => [...$module->toArray(), ...config('modules.'.$module->key)]),
         ]);

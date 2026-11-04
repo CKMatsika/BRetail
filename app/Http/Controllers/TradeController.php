@@ -64,7 +64,7 @@ final class TradeController
 
         $c = Company::firstOrFail();
 
-        return Inertia::render('Workspace', ['section' => $r->route('section'), 'trade' => $this->data($r), 'user' => $r->user()->only('id', 'name', 'email'), 'role' => $r->user()->role->name, 'permissions' => $r->user()->role->permissions, 'company' => [...$c->only('name', 'industry', 'base_currency', 'accepted_currencies'), 'settings' => []], 'branches' => AccountingAccess::branches($r->user())->with('warehouses')->get(), 'modules' => TenantModule::get()->map(fn ($m) => [...$m->toArray(), ...config('modules.'.$m->key)])]);
+        return Inertia::render('Workspace', ['section' => $r->route('section'), 'trade' => $this->data($r), 'user' => $r->user()->only('id', 'name', 'email'), 'role' => $r->user()->role->name, 'permissions' => $r->user()->role->permissions, 'company' => [...$c->only('name', 'industry', 'base_currency', 'accepted_currencies', 'logo_url'), 'settings' => []], 'branches' => AccountingAccess::branches($r->user())->with('warehouses')->get(), 'modules' => TenantModule::get()->map(fn ($m) => [...$m->toArray(), ...config('modules.'.$m->key)])]);
     }
 
     public function index(Request $r)

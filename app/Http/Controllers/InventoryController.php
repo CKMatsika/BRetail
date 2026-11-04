@@ -37,7 +37,7 @@ class InventoryController
         $data = $this->data($r);
         $company = Company::firstOrFail();
 
-        return Inertia::render('Workspace', [...$data, 'section' => 'inventory', 'user' => $r->user()->only('id', 'name', 'email'), 'role' => $r->user()->role->name, 'permissions' => $r->user()->role->permissions, 'company' => [...$company->only('name', 'industry', 'base_currency', 'accepted_currencies'), 'settings' => []], 'branches' => Branch::whereIn('id', collect($data['warehouses'])->pluck('branch_id'))->with('warehouses')->get(), 'modules' => TenantModule::get()->map(fn ($m) => [...$m->toArray(), ...config('modules.'.$m->key)])]);
+        return Inertia::render('Workspace', [...$data, 'section' => 'inventory', 'user' => $r->user()->only('id', 'name', 'email'), 'role' => $r->user()->role->name, 'permissions' => $r->user()->role->permissions, 'company' => [...$company->only('name', 'industry', 'base_currency', 'accepted_currencies', 'logo_url'), 'settings' => []], 'branches' => Branch::whereIn('id', collect($data['warehouses'])->pluck('branch_id'))->with('warehouses')->get(), 'modules' => TenantModule::get()->map(fn ($m) => [...$m->toArray(), ...config('modules.'.$m->key)])]);
     }
 
     private function saved(Request $r, mixed $data, string $message, int $status = 200)

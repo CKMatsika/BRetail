@@ -90,7 +90,7 @@ class HrController
         return Inertia::render('Workspace', [
             'section' => 'hr', 'user' => $request->user()->only('id', 'name', 'email'), 'role' => $request->user()->role->name,
             'permissions' => $request->user()->role->permissions,
-            'company' => ['name' => Company::value('name'), 'industry' => '', 'base_currency' => Company::value('base_currency'), 'accepted_currencies' => [], 'settings' => []],
+            'company' => ['logo_url' => Company::firstOrFail()->logo_url, 'name' => Company::value('name'), 'industry' => '', 'base_currency' => Company::value('base_currency'), 'accepted_currencies' => [], 'settings' => []],
             'branches' => Branch::whereIn('id', $this->branchIds($request))->with('warehouses')->get(),
             'modules' => TenantModule::get()->map(fn ($m) => [...$m->toArray(), ...config("modules.$m->key")]),
             'hr' => $this->payload($request),

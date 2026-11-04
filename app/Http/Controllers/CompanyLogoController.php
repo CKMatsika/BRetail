@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use League\Flysystem\FilesystemException;
 
 class CompanyLogoController
 {
@@ -29,23 +30,23 @@ class CompanyLogoController
                 throw new \RuntimeException('Could not encode company logo.');
             }
             rewind($stream);
+            $bytes = stream_get_contents($stream);
             $path = 'company-logos/'.$request->user()->tenant_id.'/'.Str::uuid().'.png';
-            if (! Storage::disk('local')->put($path, $stream)) {
-                throw new \RuntimeException('Could not save company logo.');
-            }
         } finally {
             fclose($stream);
             imagedestroy($image);
         }
+        DB::transaction(function () use ($path, $bytes) {
+            $company = Company::lockForUpdate()->firstOrFail();
+            $company->logoAsset()->updateOrCreate([], ['mime' => 'image/png', 'hash' => hash('sha256', $bytes), 'contents' => base64_encode($bytes)]);
+            $company->update(['logo_path' => $path]);
+            Audit::record('company.logo_updated', (string) $company->id);
+        });
+        // The database is authoritative; local files are only a compatibility cache.
         try {
-            DB::transaction(function () use ($path) {
-                $company = Company::firstOrFail();
-                $company->update(['logo_path' => $path]);
-                Audit::record('company.logo_updated', (string) $company->id);
-            });
-        } catch (\Throwable $e) {
-            Storage::disk('local')->delete($path);
-            throw $e;
+            Storage::disk('local')->put($path, $bytes);
+        } catch (FilesystemException $e) {
+            report($e);
         }
 
         return back()->with('success', 'Company logo updated.');
@@ -54,6 +55,11 @@ class CompanyLogoController
     public function show(Request $request)
     {
         $company = Company::firstOrFail();
+        $asset = $company->logoAsset()->first();
+        if ($asset) {
+            return response(base64_decode($asset->contents, true), 200, ['Content-Type' => $asset->mime, 'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
+        }
+
         abort_unless($company->logo_path && Storage::disk('local')->exists($company->logo_path), 404);
 
         return response()->file(Storage::disk('local')->path($company->logo_path), ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
