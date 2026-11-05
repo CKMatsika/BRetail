@@ -8,5 +8,5 @@ Route::middleware('module:accounting')->prefix('accounting')->controller(Account
     Route::get('/reports', 'reports');
     Route::get('/export', 'export');
     Route::get('/statements/{id}', 'statement');
-    Route::post('/{action}/{id?}', 'action')->where('action', 'setup|activate|accounts|mappings|periods|lock|journals|reverse|cashbook|purchases|banks|statements|match|unmatch|close|cancel');
+    Route::post('/{action}/{id?}', 'action')->where('action', 'setup|activate|accounts|mappings|periods|lock|journals|reverse|cashbook|cashbook-correct|cashbook-reverse|purchases|banks|statements|match|unmatch|close|cancel');
 });

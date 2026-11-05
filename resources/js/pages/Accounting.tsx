@@ -6,6 +6,10 @@ import {
     amount,
     dateText,
 } from "../components/ReportViews";
+import {
+    CashbookView,
+    CashbookTransaction,
+} from "../components/CashbookView";
 type Account = {
     id: number;
     code: string;
@@ -78,6 +82,7 @@ export type AccountingData = {
         total: string;
         date: string;
     }[];
+    cashbook_transactions?: CashbookTransaction[];
 };
 type Values = Record<string, string | boolean>;
 type Field = {
@@ -813,50 +818,18 @@ export default function Accounting({
                             )}
                         </>
                     )}
-                    {tab === "cashbook" && can("post") && (
-                        <Form
-                            title="Cashbook receipt, payment or transfer"
-                            fields={[
-                                ...basics,
-                                {
-                                    key: "kind",
-                                    label: "Transaction",
-                                    options: [
-                                        "receipt",
-                                        "payment",
-                                        "transfer",
-                                    ].map((v) => ({ value: v, label: v })),
-                                },
-                                {
-                                    key: "cash_account_id",
-                                    label: "Cash / bank account",
-                                    options: cashAccounts,
-                                },
-                                {
-                                    key: "offset_account_id",
-                                    label: "Ledger account (Cost of Sales, Expense, Income, etc.)",
-                                    options: groupedAccounts,
-                                },
-                                {
-                                    key: "amount",
-                                    label: "Amount (two decimals)",
-                                },
-                                {
-                                    key: "tax_rate",
-                                    label: "VAT / Tax % (optional, e.g. 15 to split input VAT)",
-                                },
-                            ]}
-                            save={(v, id) =>
-                                post("cashbook", { ...v, book, request_id: id })
-                            }
-                            button="Post cashbook entry"
-                        >
-                            <p>
-                                Receipts debit cash; payments credit cash.
-                                If VAT % is provided on payments, input tax is automatically claimed.
-                                Transfers move cash to the counterpart cash account.
-                            </p>
-                        </Form>
+                    {tab === "cashbook" && (
+                        <CashbookView
+                            transactions={d.cashbook_transactions ?? []}
+                            accounts={d.accounts}
+                            branches={d.branches}
+                            today={d.today}
+                            book={book}
+                            currency={d.setting?.currency ?? "USD"}
+                            canPost={can("post")}
+                            canReverse={can("reverse")}
+                            onPost={post}
+                        />
                     )}
                     {tab === "purchases" && (
                         <>

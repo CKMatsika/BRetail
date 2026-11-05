@@ -381,4 +381,79 @@ class AccountingTest extends TestCase
         $this->assertSame('-575.0000', $this->balance('payable'));
         $this->assertSame('0.0000', $this->balance('inventory'));
     }
+
+    public function test_cashbook_transactions_list_correction_and_reversal(): void
+    {
+        $l = app(AccountingLedger::class);
+        $l->manual($this->owner, $this->journal()); // puts 100 into cash_safe
+        $c = app(AccountingCashbook::class);
+
+        // 1. User mistakenly captures a Cost of Sales entry as a receipt
+        $mistake = [
+            'request_id' => (string) Str::uuid(),
+            'book' => 'training',
+            'branch_id' => $this->warehouse->branch_id,
+            'date' => AccountingLedger::today(),
+            'reference' => 'STEEL-MISTAKE',
+            'description' => 'Captured cost of sales as receipt mistakenly',
+            'kind' => 'receipt',
+            'cash_account_id' => $this->account('cash_safe'),
+            'offset_account_id' => $this->account('cogs'),
+            'amount' => '50.00',
+            'cashflow' => 'operating',
+        ];
+        $jMistake = $c->post($this->owner, $mistake);
+        $this->assertNotNull($jMistake);
+
+        // 2. Transactions list shows the mistaken receipt
+        $txs = $c->transactions($this->owner, ['book' => 'training']);
+        $this->assertCount(1, $txs);
+        $this->assertSame('receipt', $txs[0]['kind']);
+        $this->assertSame('50.00', $txs[0]['amount']);
+        $this->assertFalse($txs[0]['is_reversed']);
+
+        // 3. User corrects the transaction to a payment via the API
+        $correction = [
+            'date' => AccountingLedger::today(),
+            'branch_id' => $this->warehouse->branch_id,
+            'reference' => 'STEEL-CORRECTED',
+            'description' => 'Corrected Cost of Sales purchase to payment',
+            'kind' => 'payment',
+            'cash_account_id' => $this->account('cash_safe'),
+            'offset_account_id' => $this->account('cogs'),
+            'amount' => '50.00',
+            'cashflow' => 'operating',
+        ];
+        $resp = $this->actingAs($this->owner)->postJson('/accounting/cashbook-correct/'.$jMistake->id, $correction);
+        $resp->assertOk();
+        app(TenantContext::class)->id = $this->owner->tenant_id;
+        $correctedId = $resp->json('data.id');
+
+        // Balances: original 100 safe cash minus 50 payment = 50. cogs = 50 debit.
+        $this->assertSame('50.0000', $this->balance('cash_safe'));
+        $this->assertSame('50.0000', $this->balance('cogs'));
+
+        // Check transactions list: old one marked reversed, new one is active payment
+        $txsAfter = $c->transactions($this->owner, ['book' => 'training']);
+        $this->assertCount(2, $txsAfter);
+        $correctedTx = collect($txsAfter)->firstWhere('id', $correctedId);
+        $oldTx = collect($txsAfter)->firstWhere('id', $jMistake->id);
+
+        $this->assertSame('payment', $correctedTx['kind']);
+        $this->assertFalse($correctedTx['is_reversed']);
+        $this->assertSame('receipt', $oldTx['kind']);
+        $this->assertTrue($oldTx['is_reversed']);
+
+        // 4. Test reversing the corrected transaction
+        $reverseResp = $this->actingAs($this->owner)->postJson('/accounting/cashbook-reverse/'.$correctedId, [
+            'date' => AccountingLedger::today(),
+            'reason' => 'Testing cancellation of corrected payment',
+        ]);
+        $reverseResp->assertOk();
+        app(TenantContext::class)->id = $this->owner->tenant_id;
+
+        // Safe cash returns to 100, cogs returns to 0
+        $this->assertSame('100.0000', $this->balance('cash_safe'));
+        $this->assertSame('0.0000', $this->balance('cogs'));
+    }
 }
