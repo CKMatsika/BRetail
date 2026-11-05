@@ -2,8 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\ProductVariant;
+use App\Models\ChartAccount;
 use App\Models\Company;
+use App\Models\ProductVariant;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Models\TenantModule;
@@ -28,7 +29,9 @@ final class PurchaseOrders
             'request_id' => 'required|uuid', 'supplier_id' => 'required|integer', 'warehouse_id' => 'required|integer',
             'date' => 'required|date_format:Y-m-d', 'expected_on' => 'nullable|date_format:Y-m-d|after_or_equal:date',
             'notes' => 'nullable|string|max:2000', 'currency' => 'nullable|string|size:3', 'items' => 'required|array|min:1|max:500',
-            'items.*.variant_id' => 'required|integer|distinct',
+            'items.*.variant_id' => 'nullable|integer',
+            'items.*.account_id' => 'nullable|integer',
+            'items.*.description' => 'nullable|string|max:255',
             'items.*.quantity' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,3})?$/'],
             'items.*.unit_cost' => ['required', 'string', Catalog::MONEY],
         ])->validate();
@@ -57,17 +60,48 @@ final class PurchaseOrders
             $items = [];
             $originalTotal = BigDecimal::zero();
             foreach ($d['items'] as $item) {
-                $v = ProductVariant::with('product')->findOrFail($item['variant_id']);
-                if (! $v->active || ! $v->product->active || ! BigDecimal::of($item['quantity'])->isPositive()) {
-                    throw ValidationException::withMessages(['items' => 'Choose active products and positive quantities.']);
+                if (empty($item['variant_id']) && empty($item['account_id'])) {
+                    throw ValidationException::withMessages(['items' => 'Each line must have either a product variant or a ledger account.']);
                 }
                 $quantity = BigDecimal::of($item['quantity'])->toScale(3);
-                if ($v->product->item_type === 'service') {
-                    throw ValidationException::withMessages(['items' => 'Goods purchase orders require physical stock items. Services cannot be received into stock.']);
+                if (! $quantity->isPositive()) {
+                    throw ValidationException::withMessages(['items' => 'Choose positive quantities.']);
                 }
                 $originalCost = BigDecimal::of($item['unit_cost'])->toScale(4);
                 $originalTotal = $originalTotal->plus($quantity->multipliedBy($originalCost)->toScale(4, RoundingMode::HalfUp));
-                $items[] = [...$item, 'quantity' => (string) $quantity, 'unit_cost' => (string) $originalCost, 'sku' => $v->sku, 'description' => $v->product->name.' / '.$v->name];
+
+                if (! empty($item['account_id'])) {
+                    $acc = ChartAccount::where('active', true)->findOrFail($item['account_id']);
+                    if ($acc->is_cash) {
+                        throw ValidationException::withMessages(['items' => 'Expenditure lines cannot use cash accounts.']);
+                    }
+                    $items[] = [
+                        'line_type' => 'account',
+                        'account_id' => $acc->id,
+                        'variant_id' => null,
+                        'quantity' => (string) $quantity,
+                        'unit_cost' => (string) $originalCost,
+                        'sku' => $acc->code,
+                        'description' => $item['description'] ?? ($acc->code.' '.$acc->name),
+                    ];
+                } else {
+                    $v = ProductVariant::with('product')->findOrFail($item['variant_id']);
+                    if (! $v->active || ! $v->product->active) {
+                        throw ValidationException::withMessages(['items' => 'Choose active products and positive quantities.']);
+                    }
+                    if ($v->product->item_type === 'service') {
+                        throw ValidationException::withMessages(['items' => 'Goods purchase orders require physical stock items. Services cannot be received into stock.']);
+                    }
+                    $items[] = [
+                        'line_type' => 'stock',
+                        'variant_id' => $v->id,
+                        'account_id' => null,
+                        'quantity' => (string) $quantity,
+                        'unit_cost' => (string) $originalCost,
+                        'sku' => $v->sku,
+                        'description' => $v->product->name.' / '.$v->name,
+                    ];
+                }
             }
             $snapshot = null;
             if ($code !== $base) {

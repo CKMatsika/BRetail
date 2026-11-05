@@ -2,8 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\ChartAccount;
 use App\Models\Currency;
+use App\Models\ProductVariant;
 use App\Models\PurchaseOrder;
+use App\Models\Supplier;
 use App\Models\TradeDocument;
 use App\Models\User;
 use Brick\Math\BigDecimal;
@@ -15,7 +18,7 @@ final class TradePurchasing
 {
     public function receive(User $u, int $orderId, array $input): TradeDocument
     {
-        $d = Validator::make($input, ['request_id' => 'required|uuid', 'date' => 'required|date_format:Y-m-d', 'reference' => 'required|string|max:100', 'items' => 'required|array|min:1|max:500', 'items.*.variant_id' => 'required|integer|distinct', 'items.*.quantity' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,3})?$/']])->validate();
+        $d = Validator::make($input, ['request_id' => 'required|uuid', 'date' => 'required|date_format:Y-m-d', 'reference' => 'required|string|max:100', 'items' => 'required|array|min:1|max:500', 'items.*.variant_id' => 'nullable|integer', 'items.*.account_id' => 'nullable|integer', 'items.*.quantity' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,3})?$/']])->validate();
 
         return DB::transaction(function () use ($u, $orderId, $d) {
             $t = app(TradeLedger::class);
@@ -27,19 +30,23 @@ final class TradePurchasing
                 return $old;
             }if (! in_array($o->status, ['approved', 'partially_received'], true) || $o->book !== AccountingAccess::book() || $d['date'] < $o->date) {
                 TradeLedger::fail('Order must be approved in the current book and received on or after its date.');
-            }$received = [];
+            }
+            $lineKey = fn ($i) => ! empty($i['variant_id']) ? 'v_'.$i['variant_id'] : (! empty($i['account_id']) ? 'a_'.$i['account_id'] : '');
+            $received = [];
             foreach (TradeDocument::where('kind', 'receipt')->where('order_id', $o->id)->get() as $r) {
                 foreach ($r->items as $i) {
-                    $received[$i['variant_id']] = (string) BigDecimal::of($received[$i['variant_id']] ?? '0')->plus($i['quantity']);
+                    $k = $lineKey($i);
+                    $received[$k] = (string) BigDecimal::of($received[$k] ?? '0')->plus($i['quantity']);
                 }
-            }$ordered = collect($o->items)->keyBy('variant_id');
+            }$ordered = collect($o->items)->keyBy($lineKey);
             $items = [];
             $net = BigDecimal::zero();
             $originalNet = BigDecimal::zero();
             foreach ($d['items'] as $i) {
-                $line = $ordered->get($i['variant_id']);
+                $k = $lineKey($i);
+                $line = $ordered->get($k);
                 $q = BigDecimal::of($i['quantity']);
-                if (! $line || ! $q->isPositive() || $q->plus($received[$i['variant_id']] ?? '0')->isGreaterThan($line['quantity'])) {
+                if (! $line || ! $q->isPositive() || $q->plus($received[$k] ?? '0')->isGreaterThan($line['quantity'])) {
                     TradeLedger::fail('Receipt quantity exceeds the unreceived order quantity.');
                 }$value = $q->multipliedBy($line['unit_cost'])->toScale(4, RoundingMode::HalfUp);
                 $item = [...$line, 'quantity' => (string) $q->toScale(3), 'value' => (string) $value];
@@ -51,17 +58,38 @@ final class TradePurchasing
                 }
                 $items[] = $item;
                 $net = $net->plus($value);
-                $received[$i['variant_id']] = (string) $q->plus($received[$i['variant_id']] ?? '0');
+                $received[$k] = (string) $q->plus($received[$k] ?? '0');
             }
             $receiptMinorUnits = $o->currency_snapshot ? (int) Currency::where('code', $o->currency_snapshot['currency'])->value('minor_units') : 4;
             $receiptSnapshot = $o->currency_snapshot ? [...$o->currency_snapshot, 'original_amount' => (string) $originalNet->toScale($receiptMinorUnits, RoundingMode::HalfUp), 'base_amount' => (string) $net] : null;
             $doc = $t->document($u, 'receipt', [...collect($d)->except('items')->all(), 'warehouse_id' => $o->warehouse_id, 'supplier_id' => $o->supplier_id, 'party_name' => $o->supplier_name, 'order_id' => $o->id, 'currency_snapshot' => $receiptSnapshot], $items, (string) $net, '0', (string) $net, $payload);
-            app(StockLedger::class)->trade($u, ['request_id' => $d['request_id'], 'warehouse_id' => $o->warehouse_id, 'type' => 'goods_receipt', 'reference' => $doc->number, 'reason' => 'Receipt against '.$o->number, 'lines' => array_map(fn ($i) => collect($i)->only('variant_id', 'quantity', 'unit_cost')->all(), $items)]);
+            
+            $stockLines = array_values(array_filter($items, fn ($i) => ! empty($i['variant_id'])));
+            if (count($stockLines) > 0) {
+                app(StockLedger::class)->trade($u, ['request_id' => $d['request_id'], 'warehouse_id' => $o->warehouse_id, 'type' => 'goods_receipt', 'reference' => $doc->number, 'reason' => 'Receipt against '.$o->number, 'lines' => array_map(fn ($i) => collect($i)->only('variant_id', 'quantity', 'unit_cost')->all(), $stockLines)]);
+            }
             $l = app(AccountingLedger::class);
-            $t->post($u, $doc, [$l->line('inventory', (string) $net), $l->line($t->accrual()->id, '0', (string) $net)]);
+            $stockNet = collect($stockLines)->reduce(fn ($sum, $i) => $sum->plus($i['value']), BigDecimal::zero());
+            $posting = [];
+            if ($stockNet->isPositive()) {
+                $posting[] = $l->line('inventory', (string) $stockNet);
+            }
+            $accountSums = [];
+            foreach ($items as $i) {
+                if (! empty($i['account_id'])) {
+                    $accountSums[$i['account_id']] = ($accountSums[$i['account_id']] ?? BigDecimal::zero())->plus($i['value']);
+                }
+            }
+            foreach ($accountSums as $accId => $accVal) {
+                $posting[] = $l->line((int) $accId, (string) $accVal);
+            }
+            $posting[] = $l->line($t->accrual()->id, '0', (string) $net);
+            $t->post($u, $doc, $posting);
+
             $complete = true;
             foreach ($o->items as $i) {
-                if (BigDecimal::of($received[$i['variant_id']] ?? '0')->isLessThan($i['quantity'])) {
+                $k = $lineKey($i);
+                if (BigDecimal::of($received[$k] ?? '0')->isLessThan($i['quantity'])) {
                     $complete = false;
                 }
             }$o->update(['status' => $complete ? 'completed' : 'partially_received']);
@@ -72,7 +100,7 @@ final class TradePurchasing
 
     public function bill(User $u, int $receiptId, array $input): TradeDocument
     {
-        $d = Validator::make($input, ['request_id' => 'required|uuid', 'date' => 'required|date_format:Y-m-d', 'due_on' => 'required|date_format:Y-m-d|after_or_equal:date', 'reference' => 'required|string|max:100', 'tax_rate' => ['required', 'string', 'numeric', 'between:0,100', 'decimal:0,4'], 'items' => 'required|array|min:1|max:500', 'items.*.variant_id' => 'required|integer|distinct', 'items.*.quantity' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,3})?$/']])->validate();
+        $d = Validator::make($input, ['request_id' => 'required|uuid', 'date' => 'required|date_format:Y-m-d', 'due_on' => 'required|date_format:Y-m-d|after_or_equal:date', 'reference' => 'required|string|max:100', 'tax_rate' => ['required', 'string', 'numeric', 'between:0,100', 'decimal:0,4'], 'items' => 'required|array|min:1|max:500', 'items.*.variant_id' => 'nullable|integer', 'items.*.account_id' => 'nullable|integer', 'items.*.quantity' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,3})?$/']])->validate();
 
         return DB::transaction(function () use ($u, $receiptId, $d) {
             $t = app(TradeLedger::class);
@@ -86,20 +114,24 @@ final class TradePurchasing
                 TradeLedger::fail('Bill must follow the receipt in its operating book.');
             }if (TradeDocument::where(['kind' => 'bill', 'book' => $r->book, 'supplier_id' => $r->supplier_id, 'reference' => $d['reference']])->exists()) {
                 TradeLedger::fail('Supplier invoice already posted.');
-            }$billed = [];
+            }
+            $lineKey = fn ($i) => ! empty($i['variant_id']) ? 'v_'.$i['variant_id'] : (! empty($i['account_id']) ? 'a_'.$i['account_id'] : '');
+            $billed = [];
             foreach (TradeDocument::where('kind', 'bill')->where('parent_id', $r->id)->get() as $b) {
                 foreach ($b->items as $i) {
-                    $billed[$i['variant_id']] = (string) BigDecimal::of($billed[$i['variant_id']] ?? '0')->plus($i['quantity']);
+                    $k = $lineKey($i);
+                    $billed[$k] = (string) BigDecimal::of($billed[$k] ?? '0')->plus($i['quantity']);
                 }
-            }$received = collect($r->items)->keyBy('variant_id');
+            }$received = collect($r->items)->keyBy($lineKey);
             $items = [];
             $net = BigDecimal::zero();
             $receiptNet = BigDecimal::zero();
             $originalNet = BigDecimal::zero();
             foreach ($d['items'] as $i) {
-                $line = $received->get($i['variant_id']);
+                $k = $lineKey($i);
+                $line = $received->get($k);
                 $q = BigDecimal::of($i['quantity']);
-                $prior = $billed[$i['variant_id']] ?? '0';
+                $prior = $billed[$k] ?? '0';
                 if (! $line || ! $q->isPositive() || $q->plus($prior)->isGreaterThan($line['quantity'])) {
                     TradeLedger::fail('Bill quantity exceeds the unbilled receipt quantity.');
                 }
@@ -158,6 +190,141 @@ final class TradePurchasing
             } elseif ($rounding->isNegative()) {
                 $posting[] = $l->line('rounding', '0', (string) $rounding->abs());
             }
+            $t->post($u, $doc, $posting);
+
+            return $doc;
+        }, 3);
+    }
+
+    public function directBill(User $u, array $input): TradeDocument
+    {
+        $d = Validator::make($input, [
+            'request_id' => 'required|uuid',
+            'warehouse_id' => 'required|integer',
+            'supplier_id' => 'required|integer',
+            'date' => 'required|date_format:Y-m-d',
+            'due_on' => 'required|date_format:Y-m-d|after_or_equal:date',
+            'reference' => 'required|string|max:100',
+            'tax_rate' => ['required', 'string', 'numeric', 'between:0,100', 'decimal:0,4'],
+            'items' => 'required|array|min:1|max:500',
+            'items.*.variant_id' => 'nullable|integer',
+            'items.*.account_id' => 'nullable|integer',
+            'items.*.description' => 'nullable|string|max:255',
+            'items.*.quantity' => ['required', 'string', 'regex:/^\d{1,9}(\.\d{1,3})?$/'],
+            'items.*.unit_cost' => ['required', 'string', Catalog::MONEY],
+        ])->validate();
+
+        return DB::transaction(function () use ($u, $d) {
+            $t = app(TradeLedger::class);
+            $t->lock($u, 'purchasing.bill');
+            $supplier = Supplier::findOrFail($d['supplier_id']);
+            if (! $supplier->active) {
+                TradeLedger::fail('Supplier is inactive.');
+            }
+            InventoryAccess::warehouse($u, $d['warehouse_id']);
+            $book = AccountingAccess::book();
+            if ($old = $t->existing($d['request_id'], $d)) {
+                return $old;
+            }
+            if (TradeDocument::where(['kind' => 'bill', 'book' => $book, 'supplier_id' => $supplier->id, 'reference' => $d['reference']])->exists()) {
+                TradeLedger::fail('Supplier invoice already posted.');
+            }
+
+            $items = [];
+            $net = BigDecimal::zero();
+            $accountSums = [];
+            $stockLines = [];
+
+            foreach ($d['items'] as $i) {
+                if (empty($i['variant_id']) && empty($i['account_id'])) {
+                    TradeLedger::fail('Each line must have either a product variant or a ledger account.');
+                }
+                $q = BigDecimal::of($i['quantity'])->toScale(3);
+                if (! $q->isPositive()) {
+                    TradeLedger::fail('Quantities must be positive.');
+                }
+                $unitCost = BigDecimal::of($i['unit_cost'])->toScale(4);
+                $lineValue = $q->multipliedBy($unitCost)->toScale(4, RoundingMode::HalfUp);
+                $net = $net->plus($lineValue);
+
+                if (! empty($i['account_id'])) {
+                    $acc = ChartAccount::where('active', true)->findOrFail($i['account_id']);
+                    if ($acc->is_cash) {
+                        TradeLedger::fail('Cannot use cash accounts as expense lines.');
+                    }
+                    $item = [
+                        'line_type' => 'account',
+                        'account_id' => $acc->id,
+                        'variant_id' => null,
+                        'sku' => $acc->code,
+                        'description' => $i['description'] ?? ($acc->code.' '.$acc->name),
+                        'quantity' => (string) $q,
+                        'unit_cost' => (string) $unitCost,
+                        'value' => (string) $lineValue,
+                        'net' => (string) $lineValue,
+                    ];
+                    $accountSums[$acc->id] = ($accountSums[$acc->id] ?? BigDecimal::zero())->plus($lineValue);
+                } else {
+                    $v = ProductVariant::with('product')->findOrFail($i['variant_id']);
+                    $item = [
+                        'line_type' => 'stock',
+                        'variant_id' => $v->id,
+                        'account_id' => null,
+                        'sku' => $v->sku,
+                        'description' => $v->product->name.' / '.$v->name,
+                        'quantity' => (string) $q,
+                        'unit_cost' => (string) $unitCost,
+                        'value' => (string) $lineValue,
+                        'net' => (string) $lineValue,
+                    ];
+                    $stockLines[] = $item;
+                }
+                $items[] = $item;
+            }
+
+            $tax = $net->multipliedBy($d['tax_rate'])->dividedBy('100', 2, RoundingMode::HalfUp);
+            $total = $net->plus($tax)->toScale(2, RoundingMode::HalfUp);
+            $rounding = $total->minus($net)->minus($tax);
+
+            $doc = $t->document($u, 'bill', [
+                'request_id' => $d['request_id'],
+                'date' => $d['date'],
+                'due_on' => $d['due_on'],
+                'reference' => $d['reference'],
+                'warehouse_id' => $d['warehouse_id'],
+                'supplier_id' => $supplier->id,
+                'party_name' => $supplier->name,
+                'currency_snapshot' => null,
+            ], $items, (string) $net, (string) $tax, (string) $total, $d);
+
+            if (count($stockLines) > 0) {
+                app(StockLedger::class)->trade($u, [
+                    'request_id' => $d['request_id'],
+                    'warehouse_id' => $d['warehouse_id'],
+                    'type' => 'goods_receipt',
+                    'reference' => $doc->number,
+                    'reason' => 'Direct invoice from '.$supplier->name,
+                    'lines' => array_map(fn ($i) => ['variant_id' => $i['variant_id'], 'quantity' => $i['quantity'], 'unit_cost' => $i['unit_cost']], $stockLines),
+                ]);
+            }
+
+            $l = app(AccountingLedger::class);
+            $posting = [];
+            $stockNet = collect($stockLines)->reduce(fn ($sum, $i) => $sum->plus($i['value']), BigDecimal::zero());
+            if ($stockNet->isPositive()) {
+                $posting[] = $l->line('inventory', (string) $stockNet);
+            }
+            foreach ($accountSums as $accId => $val) {
+                $posting[] = $l->line((int) $accId, (string) $val);
+            }
+            $posting[] = $l->line('tax_receivable', (string) $tax);
+            $posting[] = $l->line('payable', '0', (string) $total);
+            if ($rounding->isPositive()) {
+                $posting[] = $l->line('rounding', (string) $rounding);
+            } elseif ($rounding->isNegative()) {
+                $posting[] = $l->line('rounding', '0', (string) $rounding->abs());
+            }
+
             $t->post($u, $doc, $posting);
 
             return $doc;

@@ -326,4 +326,59 @@ class AccountingTest extends TestCase
         $this->assertTrue($failed);
         $this->assertSame(0, JournalBatch::count());
     }
+
+    public function test_cashbook_payment_with_tax_rate_splits_tax_and_posts_to_ledger_account(): void
+    {
+        $l = app(AccountingLedger::class);
+        $l->manual($this->owner, $this->journal());
+        $c = app(AccountingCashbook::class);
+        $d = [
+            'request_id' => (string) Str::uuid(),
+            'book' => 'training',
+            'branch_id' => $this->warehouse->branch_id,
+            'date' => AccountingLedger::today(),
+            'reference' => 'CASH-STEEL',
+            'description' => 'Cash purchase of steel for job',
+            'kind' => 'payment',
+            'cash_account_id' => $this->account('cash_safe'),
+            'offset_account_id' => $this->account('cogs'),
+            'amount' => '100',
+            'tax_rate' => '15',
+            'cashflow' => 'operating',
+        ];
+        $j = $c->post($this->owner, $d);
+        $this->assertNotNull($j);
+        $this->assertSame('0.0000', $this->balance('cash_safe')); // 100 - 100 = 0
+        $this->assertSame('86.9600', $this->balance('cogs'));
+        $this->assertSame('13.0400', $this->balance('tax_receivable'));
+    }
+
+    public function test_accounting_purchase_direct_to_ledger_account(): void
+    {
+        $d = [
+            'request_id' => (string) Str::uuid(),
+            'warehouse_id' => $this->warehouse->id,
+            'supplier_name' => 'Steel Supplier Direct',
+            'invoice_number' => 'DIR-STEEL-101',
+            'date' => AccountingLedger::today(),
+            'settlement' => 'payable',
+            'tax_rate' => '15',
+            'items' => [
+                [
+                    'account_id' => $this->account('cogs'),
+                    'description' => 'Mild steel plates',
+                    'quantity' => '10',
+                    'unit_cost' => '50',
+                ],
+            ],
+        ];
+        $p = app(AccountingPurchases::class)->post($this->owner, $d);
+        $this->assertSame('500.0000', $p->net);
+        $this->assertSame('75.0000', $p->tax);
+        $this->assertSame('575.0000', $p->total);
+        $this->assertSame('500.0000', $this->balance('cogs'));
+        $this->assertSame('75.0000', $this->balance('tax_receivable'));
+        $this->assertSame('-575.0000', $this->balance('payable'));
+        $this->assertSame('0.0000', $this->balance('inventory'));
+    }
 }

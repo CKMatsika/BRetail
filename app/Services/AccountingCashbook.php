@@ -8,6 +8,7 @@ use App\Models\JournalBatch;
 use App\Models\PostingLink;
 use App\Models\User;
 use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -18,7 +19,20 @@ final class AccountingCashbook
     public function post(User $u, array $input): JournalBatch
     {
         AccountingAccess::permit($u, 'accounting.post');
-        $d = Validator::make($input, ['request_id' => 'required|uuid', 'book' => ['required', Rule::in(['live', 'training'])], 'branch_id' => 'required|integer', 'date' => 'required|date_format:Y-m-d', 'kind' => ['required', Rule::in(['receipt', 'payment', 'transfer'])], 'cash_account_id' => 'required|integer', 'offset_account_id' => 'required|integer|different:cash_account_id', 'amount' => ['required', 'string', PosMath::MONEY], 'reference' => 'required|string|max:160', 'description' => 'required|string|max:2000', 'cashflow' => ['required', Rule::in(['operating', 'investing', 'financing', 'none'])]])->validate();
+        $d = Validator::make($input, [
+            'request_id' => 'required|uuid',
+            'book' => ['required', Rule::in(['live', 'training'])],
+            'branch_id' => 'required|integer',
+            'date' => 'required|date_format:Y-m-d',
+            'kind' => ['required', Rule::in(['receipt', 'payment', 'transfer'])],
+            'cash_account_id' => 'required|integer',
+            'offset_account_id' => 'required|integer|different:cash_account_id',
+            'amount' => ['required', 'string', PosMath::MONEY],
+            'reference' => 'required|string|max:160',
+            'description' => 'required|string|max:2000',
+            'cashflow' => ['required', Rule::in(['operating', 'investing', 'financing', 'none'])],
+            'tax_rate' => ['sometimes', 'nullable', 'numeric', 'between:0,100', 'decimal:0,4'],
+        ])->validate();
 
         return DB::transaction(function () use ($u, $d) {
             AccountingAccess::lock($u, 'accounting.post');
@@ -35,9 +49,44 @@ final class AccountingCashbook
                 throw ValidationException::withMessages(['amount' => 'Insufficient recorded cash on the posting date.']);
             }
             $receipt = $d['kind'] === 'receipt';
-            $lines = [$l->line($cash->id, $receipt ? $d['amount'] : '0', $receipt ? '0' : $d['amount']), $l->line($offset->id, $receipt ? '0' : $d['amount'], $receipt ? $d['amount'] : '0')];
+            $taxRate = isset($d['tax_rate']) && BigDecimal::of($d['tax_rate'])->isPositive() ? BigDecimal::of($d['tax_rate']) : null;
 
-            return $l->system($u, ['book' => $d['book'], 'branch_id' => $d['branch_id'], 'date' => $d['date'], 'reference' => $d['reference'], 'description' => $d['description'], 'cashflow' => $d['kind'] === 'transfer' ? 'none' : $d['cashflow'], 'source_type' => 'cashbook', 'source_id' => $d['request_id'], 'lines' => $lines]);
+            if ($taxRate !== null && $d['kind'] !== 'transfer') {
+                $total = BigDecimal::of($d['amount']);
+                $multiplier = BigDecimal::of('1')->plus($taxRate->dividedBy('100', 6, RoundingMode::HalfUp));
+                $net = $total->dividedBy($multiplier, 2, RoundingMode::HalfUp);
+                $tax = $total->minus($net);
+                if ($receipt) {
+                    $lines = [
+                        $l->line($cash->id, (string) $total),
+                        $l->line($offset->id, '0', (string) $net),
+                        $l->line('tax_payable', '0', (string) $tax),
+                    ];
+                } else {
+                    $lines = [
+                        $l->line($offset->id, (string) $net),
+                        $l->line('tax_receivable', (string) $tax),
+                        $l->line($cash->id, '0', (string) $total),
+                    ];
+                }
+            } else {
+                $lines = [
+                    $l->line($cash->id, $receipt ? $d['amount'] : '0', $receipt ? '0' : $d['amount']),
+                    $l->line($offset->id, $receipt ? '0' : $d['amount'], $receipt ? $d['amount'] : '0'),
+                ];
+            }
+
+            return $l->system($u, [
+                'book' => $d['book'],
+                'branch_id' => $d['branch_id'],
+                'date' => $d['date'],
+                'reference' => $d['reference'],
+                'description' => $d['description'],
+                'cashflow' => $d['kind'] === 'transfer' ? 'none' : $d['cashflow'],
+                'source_type' => 'cashbook',
+                'source_id' => $d['request_id'],
+                'lines' => $lines,
+            ]);
         }, 3);
     }
 }

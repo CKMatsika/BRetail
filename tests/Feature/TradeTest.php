@@ -99,11 +99,12 @@ class TradeTest extends TestCase
         }
     }
 
-    private function balance(string $role): string
+    private function balance(string|int $role): string
     {
         $l = app(AccountingLedger::class);
+        $id = is_int($role) ? $role : $l->account($role)->id;
 
-        return $l->balance($l->account($role)->id, 'training', $this->w->branch_id);
+        return $l->balance($id, 'training', $this->w->branch_id);
     }
 
     private function quote(string $qty = '1'): TradeDocument
@@ -659,5 +660,116 @@ class TradeTest extends TestCase
         $order = $this->order();
         $this->get('/trade/print/order/'.$order->id)->assertOk()->assertSee('VAT Number: VAT-654321')->assertDontSee('00123456789')->assertDontSee('Banking details');
         $this->patch('/company', ['name' => $company->name, 'settings' => ['invoice_prefix' => 'INV', 'banking_details' => str_repeat('x', 2001)]])->assertSessionHasErrors('settings.banking_details');
+    }
+
+    public function test_invoice_physical_inventory_without_stock_uses_fallback_cost_and_allows_negative_balance(): void
+    {
+        $this->assertSame(0, StockBalance::count());
+        $quote = $this->quote('2');
+        $invoice = app(TradeSales::class)->invoice($this->u, $quote->id, $this->request(['accepted' => true]));
+
+        $this->assertSame('20.0000', $invoice->total);
+        $balance = StockBalance::where('variant_id', $this->v->id)->first();
+        $this->assertNotNull($balance);
+        $this->assertSame('-2.000', $balance->quantity);
+        $this->assertSame('-6.6666', $balance->value);
+        $this->assertSame('3.3333', $balance->average_cost);
+
+        $this->assertSame('20.0000', $this->balance('receivable'));
+        $this->assertSame('-20.0000', $this->balance('sales'));
+        $this->assertSame('6.6666', $this->balance('cogs'));
+        $this->assertSame('-6.6666', $this->balance('inventory'));
+
+        $rep = app(StockLedger::class)->reconcile($this->u, $this->w->id);
+        $this->assertTrue($rep['balanced']);
+    }
+
+    public function test_procurement_grv_and_bill_direct_to_cost_of_sales_account(): void
+    {
+        $cogsAccount = app(AccountingLedger::class)->account('cogs');
+        $d = [
+            'request_id' => (string) Str::uuid(),
+            'warehouse_id' => $this->w->id,
+            'supplier_id' => $this->supplier->id,
+            'date' => AccountingLedger::today(),
+            'expected_on' => AccountingLedger::today(),
+            'items' => [
+                [
+                    'account_id' => $cogsAccount->id,
+                    'description' => 'Structural steel plates',
+                    'quantity' => '5',
+                    'unit_cost' => '100',
+                ],
+            ],
+        ];
+        $order = app(PurchaseOrders::class)->create($this->u, $d);
+        app(PurchaseOrders::class)->transition($this->u, $order->id, 'approve');
+
+        // Receive against the order (GRV)
+        $receipt = app(TradePurchasing::class)->receive($this->u, $order->id, [
+            'request_id' => (string) Str::uuid(),
+            'date' => AccountingLedger::today(),
+            'reference' => 'GRV-STEEL-01',
+            'items' => [
+                [
+                    'account_id' => $cogsAccount->id,
+                    'quantity' => '5',
+                ],
+            ],
+        ]);
+
+        $this->assertSame('500.0000', $receipt->net);
+        $this->assertSame('500.0000', $this->balance($cogsAccount->id));
+        $this->assertSame('-500.0000', $this->balance('receipt_accrual'));
+        $this->assertSame(0, StockBalance::where('warehouse_id', $this->w->id)->count());
+
+        // Bill against the receipt (Supplier Invoice)
+        $bill = app(TradePurchasing::class)->bill($this->u, $receipt->id, [
+            'request_id' => (string) Str::uuid(),
+            'date' => AccountingLedger::today(),
+            'due_on' => AccountingLedger::today(),
+            'reference' => 'INV-STEEL-SUP-01',
+            'tax_rate' => '15',
+            'items' => [
+                [
+                    'account_id' => $cogsAccount->id,
+                    'quantity' => '5',
+                ],
+            ],
+        ]);
+
+        $this->assertSame('500.0000', $bill->net);
+        $this->assertSame('75.0000', $bill->tax);
+        $this->assertSame('575.0000', $bill->total);
+        $this->assertSame('0.0000', $this->balance('receipt_accrual'));
+        $this->assertSame('75.0000', $this->balance('tax_receivable'));
+        $this->assertSame('-575.0000', $this->balance('payable'));
+    }
+
+    public function test_direct_supplier_bill_to_cost_of_sales(): void
+    {
+        $cogsAccount = app(AccountingLedger::class)->account('cogs');
+        $res = $this->actingAs($this->u)->postJson('/trade/direct-bills', [
+            'request_id' => (string) Str::uuid(),
+            'warehouse_id' => $this->w->id,
+            'supplier_id' => $this->supplier->id,
+            'date' => AccountingLedger::today(),
+            'due_on' => AccountingLedger::today(),
+            'reference' => 'STEEL-DIRECT-99',
+            'tax_rate' => '0',
+            'items' => [
+                [
+                    'account_id' => $cogsAccount->id,
+                    'description' => 'Direct steel beam delivery',
+                    'quantity' => '2',
+                    'unit_cost' => '250',
+                ],
+            ],
+        ])->assertOk();
+
+        $this->assertSame('500.0000', $res->json('data.total'));
+        app(TenantContext::class)->id = $this->u->tenant_id;
+        $this->assertSame('-500.0000', $this->balance('payable'));
+        $this->assertSame('500.0000', $this->balance($cogsAccount->id));
     }
 }

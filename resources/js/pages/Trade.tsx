@@ -9,7 +9,8 @@ type Item = {
     tax?: string;
     total?: string;
     original?: Item;
-    variant_id: number;
+    variant_id?: number | null;
+    account_id?: number | null;
     quantity: string;
     unit_cost?: string;
     unit_price?: string;
@@ -90,6 +91,7 @@ export type TradeData = {
         selling_price: string;
     }[];
     cash_accounts: { id: number; code: string; name: string }[];
+    accounts?: { id: number; code: string; name: string; type: string }[];
     report: Partial<AgingSnapshot> & {
         aging: {
             id: number;
@@ -421,7 +423,8 @@ export default function Trade({
                   : "suppliers",
         ),
         [notice, setNotice] = useState(""),
-        [selected, setSelected] = useState<Doc | null>(null);
+        [selected, setSelected] = useState<Doc | null>(null),
+        [directBill, setDirectBill] = useState(false);
     const [history, setHistory] = useState<{
         number: string;
         versions: Doc[];
@@ -686,60 +689,98 @@ export default function Trade({
                                     {kind === "quantity" ? (
                                         i.sku + " " + i.description
                                     ) : (
-                                        <select
-                                            aria-label={"Product " + (n + 1)}
-                                            value={i.variant_id}
-                                            onChange={(e) =>
-                                                setItems(
-                                                    items.map((v, j) =>
-                                                        j === n
-                                                            ? {
-                                                                  ...v,
-                                                                  variant_id:
-                                                                      Number(
-                                                                          e
-                                                                              .target
-                                                                              .value,
-                                                                      ),
-                                                                  unit_price:
-                                                                      d.variants.find(
-                                                                          (v) =>
-                                                                              v.id ===
-                                                                              Number(
-                                                                                  e
-                                                                                      .target
-                                                                                      .value,
-                                                                              ),
-                                                                      )
-                                                                          ?.selling_price ??
-                                                                      "0",
-                                                              }
-                                                            : v,
-                                                    ),
-                                                )
-                                            }
-                                        >
-                                            {d.variants
-                                                .filter(
-                                                    (v) =>
-                                                        kind !== "cost" ||
-                                                        v.product?.item_type !==
-                                                            "service",
-                                                )
-                                                .map((v) => (
-                                                    <option
-                                                        key={v.id}
-                                                        value={v.id}
-                                                    >
-                                                        {v.sku} {v.name}
-                                                        {v.product
-                                                            ?.item_type ===
-                                                        "service"
-                                                            ? " · Service"
-                                                            : ""}
-                                                    </option>
-                                                ))}
-                                        </select>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                            <select
+                                                aria-label={"Product or Account " + (n + 1)}
+                                                value={
+                                                    i.account_id
+                                                        ? `acc_${i.account_id}`
+                                                        : i.variant_id
+                                                          ? `var_${i.variant_id}`
+                                                          : ""
+                                                }
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    if (val.startsWith("acc_")) {
+                                                        const accId = Number(val.replace("acc_", ""));
+                                                        const acc = d.accounts?.find((a) => a.id === accId);
+                                                        setItems(
+                                                            items.map((v, j) =>
+                                                                j === n
+                                                                    ? {
+                                                                          ...v,
+                                                                          account_id: accId,
+                                                                          variant_id: null,
+                                                                          sku: acc?.code ?? "",
+                                                                          description: acc ? `${acc.code} ${acc.name}` : "",
+                                                                          unit_price: "0",
+                                                                      }
+                                                                    : v,
+                                                            ),
+                                                        );
+                                                    } else {
+                                                        const varId = Number(val.replace("var_", ""));
+                                                        const variant = d.variants.find((v) => v.id === varId);
+                                                        setItems(
+                                                            items.map((v, j) =>
+                                                                j === n
+                                                                    ? {
+                                                                          ...v,
+                                                                          variant_id: varId,
+                                                                          account_id: null,
+                                                                          sku: variant?.sku ?? "",
+                                                                          description: variant?.name ?? "",
+                                                                          unit_price: variant?.selling_price ?? "0",
+                                                                      }
+                                                                    : v,
+                                                            ),
+                                                        );
+                                                    }
+                                                }}
+                                            >
+                                                <optgroup label="Physical Stock Items">
+                                                    {d.variants
+                                                        .filter(
+                                                            (v) =>
+                                                                kind !== "cost" ||
+                                                                v.product?.item_type !== "service",
+                                                        )
+                                                        .map((v) => (
+                                                            <option key={`var_${v.id}`} value={`var_${v.id}`}>
+                                                                {v.sku} {v.name}
+                                                                {v.product?.item_type === "service" ? " · Service" : ""}
+                                                            </option>
+                                                        ))}
+                                                </optgroup>
+                                                {kind === "cost" && d.accounts && d.accounts.length > 0 && (
+                                                    <optgroup label="Direct Ledger Accounts (Cost of Sales / Expense)">
+                                                        {d.accounts.map((a) => (
+                                                            <option key={`acc_${a.id}`} value={`acc_${a.id}`}>
+                                                                [{a.type}] {a.code} {a.name}
+                                                            </option>
+                                                        ))}
+                                                    </optgroup>
+                                                )}
+                                            </select>
+                                            {kind === "cost" && i.account_id && (
+                                                <input
+                                                    placeholder="Expenditure description (e.g. Steel Plates for Project)"
+                                                    value={i.description ?? ""}
+                                                    onChange={(e) =>
+                                                        setItems(
+                                                            items.map((v, j) =>
+                                                                j === n
+                                                                    ? {
+                                                                          ...v,
+                                                                          description: e.target.value,
+                                                                      }
+                                                                    : v,
+                                                            ),
+                                                        )
+                                                    }
+                                                />
+                                            )}
+                                        </div>
                                     )}
                                 </td>
                                 <td>
@@ -906,7 +947,11 @@ export default function Trade({
     const quantities = () =>
         items
             .filter((i) => i.quantity !== "" && Number(i.quantity) !== 0)
-            .map((i) => ({ variant_id: i.variant_id, quantity: i.quantity }));
+            .map((i) => ({
+                variant_id: i.variant_id ?? null,
+                account_id: i.account_id ?? null,
+                quantity: i.quantity,
+            }));
     const list = (docs: Doc[], buttons: (doc: Doc) => React.ReactNode) => (
         <div className="trade-card trade-table">
             <table>
@@ -1408,7 +1453,9 @@ export default function Trade({
                                         expected_on: v.expected_on || null,
                                         request_id: id,
                                         items: items.map((i) => ({
-                                            variant_id: i.variant_id,
+                                            variant_id: i.variant_id ?? null,
+                                            account_id: i.account_id ?? null,
+                                            description: i.description ?? null,
                                             quantity: i.quantity,
                                             unit_cost: i.unit_cost,
                                         })),
@@ -1504,11 +1551,69 @@ export default function Trade({
                 )}
                 {tab === "bills" && (
                     <>
-                        {!selected && (
-                            <button onClick={() => navigate("receipts")}>
-                                {" "}
-                                Choose a goods receipt to match{" "}
-                            </button>
+                        <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+                            {!selected && (
+                                <button onClick={() => navigate("receipts")}>
+                                    Choose a goods receipt to match
+                                </button>
+                            )}
+                            {can("purchasing.bill") && (
+                                <button
+                                    onClick={() => {
+                                        setDirectBill(!directBill);
+                                        setSelected(null);
+                                    }}
+                                >
+                                    {directBill
+                                        ? "Hide direct invoice"
+                                        : "Record direct supplier invoice (Cost of Sales / Expense)"}
+                                </button>
+                            )}
+                        </div>
+                        {directBill && can("purchasing.bill") && (
+                            <Form
+                                title="Direct Supplier Invoice (Direct to Ledger / Cost of Sales)"
+                                fields={[
+                                    {
+                                        key: "supplier_id",
+                                        label: "Supplier",
+                                        options: suppliers,
+                                    },
+                                    ...basic,
+                                    {
+                                        key: "due_on",
+                                        label: "Payment due",
+                                        type: "date",
+                                        value: d.today,
+                                    },
+                                    {
+                                        key: "tax_rate",
+                                        label: "Input tax %",
+                                        value: "0",
+                                    },
+                                ]}
+                                save={(v, id) =>
+                                    post("direct-bills", {
+                                        ...v,
+                                        request_id: id,
+                                        items: items.map((i) => ({
+                                            variant_id: i.variant_id ?? null,
+                                            account_id: i.account_id ?? null,
+                                            description: i.description ?? null,
+                                            quantity: i.quantity,
+                                            unit_cost: i.unit_cost,
+                                        })),
+                                    })
+                                }
+                                button="Post direct supplier invoice"
+                            >
+                                <p>
+                                    Reference is the supplier invoice number.
+                                    Direct expenditure lines map straight to your selected
+                                    Cost of Sales or Expense accounts without requiring prior GRV or PO.
+                                </p>
+                                {lines("cost")}
+                            </Form>
                         )}
                         {selected?.kind === "receipt" &&
                             can("purchasing.bill") && (

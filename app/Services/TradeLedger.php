@@ -33,14 +33,17 @@ final class TradeLedger
             }
         }
         foreach (TradeDocument::whereIn('warehouse_id', $warehouses)->where('kind', 'receipt')->get() as $receipt) {
+            $lineKey = fn ($item) => ! empty($item['variant_id']) ? 'v_'.$item['variant_id'] : (! empty($item['account_id']) ? 'a_'.$item['account_id'] : '');
             $billed = [];
             foreach (TradeDocument::where('kind', 'bill')->where('parent_id', $receipt->id)->get() as $bill) {
                 foreach ($bill->items as $item) {
-                    $billed[$item['variant_id']] = (string) BigDecimal::of($billed[$item['variant_id']] ?? '0')->plus($item['quantity']);
+                    $k = $lineKey($item);
+                    $billed[$k] = (string) BigDecimal::of($billed[$k] ?? '0')->plus($item['quantity']);
                 }
             }
             foreach ($receipt->items as $item) {
-                if (BigDecimal::of($item['quantity'])->isGreaterThan($billed[$item['variant_id']] ?? '0')) {
+                $k = $lineKey($item);
+                if (BigDecimal::of($item['quantity'])->isGreaterThan($billed[$k] ?? '0')) {
                     self::fail('Match outstanding goods receipts to supplier bills before deactivating this branch.');
                 }
             }

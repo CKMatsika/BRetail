@@ -50,7 +50,11 @@ final class AccountingLedger
 
     public function line(string|int $account, string $debit = '0', string $credit = '0', ?string $description = null): array
     {
-        return ['account_id' => is_int($account) ? $account : $this->account($account)->id, 'debit' => self::value($debit), 'credit' => self::value($credit), 'description' => $description];
+        $id = is_int($account) || (is_numeric($account) && (string) (int) $account === (string) $account)
+            ? (int) $account
+            : $this->account((string) $account)->id;
+
+        return ['account_id' => $id, 'debit' => self::value($debit), 'credit' => self::value($credit), 'description' => $description];
     }
 
     public function balance(int $account, string $book, ?int $branch = null, ?string $through = null, ?string $before = null): string

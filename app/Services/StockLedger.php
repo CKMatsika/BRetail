@@ -122,7 +122,9 @@ final class StockLedger
                 $oldQty = BigDecimal::of($balance->quantity);
                 $oldValue = BigDecimal::of($balance->value);
                 $newQty = $oldQty->plus($quantity);
-                if ($newQty->isNegative()) {
+                $allowNegative = in_array($operation, ['trade_sale', 'invoice_amendment_sale'], true)
+                    || (bool) (\App\Models\Company::first()?->settings['allow_negative_stock'] ?? false);
+                if ($newQty->isNegative() && ! $allowNegative) {
                     throw ValidationException::withMessages(['lines' => "Insufficient stock for {$variant->sku}."]);
                 }
                 if ($d['type'] === 'opening' && ($quantity->isNegative() || StockMovement::where('warehouse_id', $d['warehouse_id'])->where('variant_id', $variant->id)->exists())) {
@@ -138,18 +140,31 @@ final class StockLedger
                         $value = BigDecimal::of($line['value_override']);
                     }
                 } else {
-                    $cost = $oldValue->dividedBy($oldQty, 4, RoundingMode::HalfUp);
-                    $value = $newQty->isZero() ? $oldValue->negated() : $oldValue->multipliedBy($quantity)->dividedBy($oldQty, 4, RoundingMode::HalfUp);
+                    if ($oldQty->isPositive()) {
+                        $cost = $oldValue->dividedBy($oldQty, 4, RoundingMode::HalfUp);
+                        $value = $newQty->isZero() ? $oldValue->negated() : $oldValue->multipliedBy($quantity)->dividedBy($oldQty, 4, RoundingMode::HalfUp);
+                    } else {
+                        $cost = BigDecimal::of($variant->cost_price ?? '0.0000');
+                        $value = $quantity->multipliedBy($cost)->toScale(4, RoundingMode::HalfUp);
+                    }
                 }
                 if ($operation === 'invoice_amendment_sale') {
                     $value = BigDecimal::of($line['value_override'])->negated();
-                    if ($oldValue->plus($value)->isNegative() || ($newQty->isZero() && ! $oldValue->plus($value)->isZero())) {
+                    if (! $allowNegative && ($oldValue->plus($value)->isNegative() || ($newQty->isZero() && ! $oldValue->plus($value)->isZero()))) {
                         throw ValidationException::withMessages(['lines' => 'Invoice edit inventory cost does not reconcile.']);
                     }
                     $cost = $value->abs()->dividedBy($quantity->abs(), 4, RoundingMode::HalfUp);
                 }
                 $newValue = $oldValue->plus($value)->toScale(4);
-                $average = $newQty->isZero() ? BigDecimal::of('0.0000') : $newValue->dividedBy($newQty, 4, RoundingMode::HalfUp);
+                if ($newQty->isZero()) {
+                    $average = BigDecimal::of('0.0000');
+                    $newValue = BigDecimal::of('0.0000');
+                } elseif ($newQty->isNegative()) {
+                    $average = $cost->isPositive() ? $cost : BigDecimal::of($variant->cost_price ?? '0.0000');
+                    $newValue = $newQty->multipliedBy($average)->toScale(4, RoundingMode::HalfUp);
+                } else {
+                    $average = $newValue->isPositive() ? $newValue->dividedBy($newQty, 4, RoundingMode::HalfUp) : $cost;
+                }
                 StockMovement::create(['document_id' => $document->id, 'variant_id' => $variant->id, 'warehouse_id' => $d['warehouse_id'], 'quantity' => (string) $quantity, 'unit_cost' => (string) $cost, 'value' => (string) $value, 'created_at' => now()]);
                 $balance->update(['quantity' => (string) $newQty, 'value' => (string) $newValue, 'average_cost' => (string) $average]);
             }

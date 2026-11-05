@@ -298,6 +298,15 @@ export default function Accounting({
     const accounts = d.accounts
         .filter((a) => a.active)
         .map((a) => ({ value: String(a.id), label: a.code + " " + a.name }));
+    const cashAccounts = d.accounts
+        .filter((a) => a.active && a.is_cash)
+        .map((a) => ({ value: String(a.id), label: a.code + " " + a.name }));
+    const groupedAccounts = d.accounts
+        .filter((a) => a.active)
+        .map((a) => ({
+            value: String(a.id),
+            label: `[${a.type}] ${a.code} ${a.name}`,
+        }));
     const accountField = (key: string, label: string): Field => ({
         key,
         label,
@@ -818,17 +827,23 @@ export default function Accounting({
                                         "transfer",
                                     ].map((v) => ({ value: v, label: v })),
                                 },
-                                accountField(
-                                    "cash_account_id",
-                                    "Cash / bank account",
-                                ),
-                                accountField(
-                                    "offset_account_id",
-                                    "Counterpart account",
-                                ),
+                                {
+                                    key: "cash_account_id",
+                                    label: "Cash / bank account",
+                                    options: cashAccounts,
+                                },
+                                {
+                                    key: "offset_account_id",
+                                    label: "Ledger account (Cost of Sales, Expense, Income, etc.)",
+                                    options: groupedAccounts,
+                                },
                                 {
                                     key: "amount",
                                     label: "Amount (two decimals)",
+                                },
+                                {
+                                    key: "tax_rate",
+                                    label: "VAT / Tax % (optional, e.g. 15 to split input VAT)",
                                 },
                             ]}
                             save={(v, id) =>
@@ -838,8 +853,8 @@ export default function Accounting({
                         >
                             <p>
                                 Receipts debit cash; payments credit cash.
-                                Transfers move cash to the counterpart cash
-                                account. Cash payments require recorded funds.
+                                If VAT % is provided on payments, input tax is automatically claimed.
+                                Transfers move cash to the counterpart cash account.
                             </p>
                         </Form>
                     )}
