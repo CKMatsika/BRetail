@@ -20,3 +20,4 @@ return [
     'default_currency' => 'USD',
     'supported_currencies' => ['USD', 'ZWG', 'ZAR', 'EUR', 'GBP'],
 ];
+

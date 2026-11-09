@@ -20,3 +20,4 @@ class TenderDocument extends TenantRecord
         return $this->belongsTo(Tender::class);
     }
 }
+

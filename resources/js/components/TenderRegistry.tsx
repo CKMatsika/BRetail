@@ -32,6 +32,7 @@ import {
     Sparkles,
 } from "lucide-react";
 import ComplianceCenter, { ComplianceData } from "./ComplianceCenter";
+import TenderAnalysisModal from "./TenderAnalysisModal";
 
 export type TenderSummary = {
     total_tenders: number;
@@ -137,6 +138,7 @@ export default function TenderRegistry({
     const [newStatus, setNewStatus] = useState("");
     const [statusReason, setStatusReason] = useState("");
     const [uploadDocModalTender, setUploadDocModalTender] = useState<TenderItem | null>(null);
+    const [analysisModalTender, setAnalysisModalTender] = useState<TenderItem | null>(null);
 
     // Form feedback
     const [submitting, setSubmitting] = useState(false);
@@ -616,47 +618,67 @@ export default function TenderRegistry({
                 />
             )}
 
-            {/* Sub-Tab 2: AI Document Analysis Preview / Launcher */}
+            {/* Sub-Tab 2: AI Document Analysis Dashboard */}
             {subTab === "ai_analysis" && (
-                <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
-                    <div className="max-w-3xl mx-auto text-center space-y-4">
-                        <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-inner">
-                            <Sparkles className="w-8 h-8 text-indigo-600" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-slate-900">
-                            AI Tender Document Ingestion & Requirement Extraction
-                        </h2>
-                        <p className="text-slate-600 text-sm leading-relaxed">
-                            Upload complex tender packages (PDF, DOCX, XLSX, scanned OCR bidding documents) to automatically extract:
-                            statutory compliance checklists, technical specification matrices, mandatory submission deadlines, bid bonds, 
-                            and personnel qualifications.
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 text-left">
-                            <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                                <FileText className="w-5 h-5 text-indigo-600 mb-2" />
-                                <h4 className="font-semibold text-slate-900 text-sm">Deep Document Parsing</h4>
-                                <p className="text-xs text-slate-500 mt-1">Multi-page RFP parsing with section mapping, page citations, and fallback OCR.</p>
+                <div className="space-y-6">
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 sm:p-8 shadow-sm">
+                        <div className="max-w-3xl mx-auto text-center space-y-3">
+                            <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mx-auto shadow-inner">
+                                <Sparkles className="w-7 h-7 text-indigo-600" />
                             </div>
-                            <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                                <Layers className="w-5 h-5 text-indigo-600 mb-2" />
-                                <h4 className="font-semibold text-slate-900 text-sm">Technical Matrices</h4>
-                                <p className="text-xs text-slate-500 mt-1">Automatic extraction of mandatory vs optional technical specifications.</p>
-                            </div>
-                            <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                                <CheckCircle2 className="w-5 h-5 text-emerald-600 mb-2" />
-                                <h4 className="font-semibold text-slate-900 text-sm">Automated Gap Analysis</h4>
-                                <p className="text-xs text-slate-500 mt-1">Instant comparison against your Company Compliance Vault documents.</p>
-                            </div>
+                            <h2 className="text-xl font-bold text-slate-900">
+                                AI Tender Document Ingestion & Requirement Extraction
+                            </h2>
+                            <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">
+                                Deep multi-format ingestion (PDF, DOCX, XLSX, ZIP, scanned OCR) extracting statutory compliance checklists,
+                                technical specification matrices, mandatory submission deadlines, bid bonds, and personnel requirements.
+                            </p>
                         </div>
-                        <div className="pt-6">
-                            <button
-                                onClick={() => setSubTab("opportunities")}
-                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 shadow-sm"
-                            >
-                                <Briefcase className="w-4 h-4" />
-                                Select Tender from Registry to Analyze
-                            </button>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                <Briefcase className="w-4 h-4 text-indigo-600" />
+                                Select a Tender to Ingest & Analyze ({data.tenders.length})
+                            </h3>
                         </div>
+
+                        {data.tenders.length === 0 ? (
+                            <p className="text-xs text-slate-500 py-6 text-center">
+                                No tender opportunities registered yet. Add a tender from the Register tab first.
+                            </p>
+                        ) : (
+                            <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                                {data.tenders.map((t) => (
+                                    <div key={t.id} className="p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                    {t.reference_number}
+                                                </span>
+                                                {renderStatusBadge(t.status)}
+                                                <span className="text-xs text-slate-400 font-medium">
+                                                    {t.documents_count} RFP document{t.documents_count === 1 ? "" : "s"} attached
+                                                </span>
+                                            </div>
+                                            <h4 className="text-sm font-bold text-slate-900">{t.title}</h4>
+                                            <p className="text-xs text-slate-500">
+                                                Entity: <strong className="text-slate-700">{t.procuring_entity}</strong> ({t.entity_type}) · Category: <span className="capitalize">{t.procurement_category}</span>
+                                            </p>
+                                        </div>
+
+                                        <button
+                                            onClick={() => setAnalysisModalTender(t)}
+                                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 shadow-sm transition-all"
+                                        >
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                            Analyze & View Matrix
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -903,6 +925,15 @@ export default function TenderRegistry({
                                         </div>
 
                                         <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setAnalysisModalTender(tender)}
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 transition-colors"
+                                                title="AI Tender Document Analysis & Matrix"
+                                            >
+                                                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                                                AI Analysis
+                                            </button>
+
                                             {canManage && (
                                                 <button
                                                     onClick={() => {
@@ -1019,6 +1050,12 @@ export default function TenderRegistry({
                                         Change Status
                                     </button>
                                 )}
+                                <button
+                                    onClick={() => setAnalysisModalTender(selectedTender)}
+                                    className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-indigo-600 text-white rounded hover:bg-indigo-700 shadow-sm"
+                                >
+                                    <Sparkles className="w-3.5 h-3.5" /> AI Analysis Matrix
+                                </button>
                                 {canManage && (
                                     <button
                                         onClick={() => {
@@ -1879,6 +1916,18 @@ export default function TenderRegistry({
                     </div>
                 </div>
             )}
+
+            {/* AI DOCUMENT ANALYSIS MODAL */}
+            {analysisModalTender && (
+                <TenderAnalysisModal
+                    tenderId={analysisModalTender.id}
+                    tenderTitle={analysisModalTender.title}
+                    tenderRef={analysisModalTender.reference_number}
+                    canManage={canManage}
+                    onClose={() => setAnalysisModalTender(null)}
+                />
+            )}
         </div>
     );
 }
+

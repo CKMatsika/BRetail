@@ -58,7 +58,7 @@ class TenderController
             'status' => 'nullable|string|in:draft,evaluating_go_no_go,active_bidding,submitted,awarded,unsuccessful,cancelled',
             'notes' => 'nullable|string|max:5000',
             'documents' => 'nullable|array',
-            'documents.*' => 'file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip,jpg,jpeg,png|max:30720',
+            'documents.*' => 'file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip,jpg,jpeg,png,txt|max:30720',
         ]);
 
         $files = $request->file('documents') ?? [];
@@ -136,7 +136,7 @@ class TenderController
     public function uploadDocument(Request $request, string $id, TenderService $service)
     {
         $request->validate([
-            'file' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip,jpg,jpeg,png|max:30720',
+            'file' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip,jpg,jpeg,png,txt|max:30720',
             'document_type' => 'nullable|string|max:80',
             'description' => 'nullable|string|max:255',
         ]);
@@ -165,3 +165,4 @@ class TenderController
         ]);
     }
 }
+

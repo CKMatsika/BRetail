@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Tender extends TenantRecord
 {
@@ -31,6 +32,21 @@ class Tender extends TenantRecord
     public function documents(): HasMany
     {
         return $this->hasMany(TenderDocument::class)->latest('id');
+    }
+
+    public function requirements(): HasMany
+    {
+        return $this->hasMany(TenderRequirement::class)->orderBy('id');
+    }
+
+    public function analyses(): HasMany
+    {
+        return $this->hasMany(TenderAnalysis::class)->latest('id');
+    }
+
+    public function latestAnalysis(): HasOne
+    {
+        return $this->hasOne(TenderAnalysis::class)->latestOfMany();
     }
 
     public function assignedEmployee(): BelongsTo
@@ -72,3 +88,4 @@ class Tender extends TenantRecord
         return (int) $now->diffInHours($closing, false);
     }
 }
+

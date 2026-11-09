@@ -396,3 +396,4 @@ class TenderTest extends TestCase
         $this->assertLessThan(0, $pastTender->daysRemaining());
     }
 }
+
