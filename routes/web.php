@@ -120,6 +120,17 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderMi
     Route::post('/tenders/alerts/dispatch-now', 'dispatchAlerts');
 });
 
+Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\BidStudioController::class)->group(function () {
+    Route::get('/tenders/{tenderId}/bid-proposal', 'show')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/bid-proposal/generate-all', 'generateAll')->whereNumber('tenderId');
+    Route::post('/tenders/bid-proposal/sections/{sectionId}/regenerate', 'regenerateSection')->whereNumber('sectionId');
+    Route::patch('/tenders/bid-proposal/sections/{sectionId}', 'updateSection')->whereNumber('sectionId');
+    Route::patch('/tenders/bid-proposal/documents/{docId}', 'updateDocument')->whereNumber('docId');
+    Route::patch('/tenders/{tenderId}/bid-proposal/status', 'updateStatus')->whereNumber('tenderId');
+    Route::get('/tenders/{tenderId}/bid-proposal/export-html', 'exportHtml')->whereNumber('tenderId');
+    Route::get('/tenders/{tenderId}/bid-proposal/export-doc', 'exportDoc')->whereNumber('tenderId');
+});
+
 Route::middleware(['auth','tenant'])->group(base_path('routes/international.php'));
 Route::middleware(['auth','tenant'])->group(base_path('routes/hr.php'));
 Route::get('/currencies', [\App\Http\Controllers\InternationalController::class,'page'])->middleware(['auth','tenant','module:currencies','module:accounting','module:inventory']);

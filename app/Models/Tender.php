@@ -79,6 +79,16 @@ class Tender extends TenantRecord
         return $this->hasMany(TenderAlert::class)->latest('id');
     }
 
+    public function bidProposal(): HasOne
+    {
+        return $this->hasOne(BidProposal::class);
+    }
+
+    public function bidStandardDocuments(): HasMany
+    {
+        return $this->hasMany(BidStandardDocument::class);
+    }
+
     public function assignedEmployee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'assigned_employee_id');

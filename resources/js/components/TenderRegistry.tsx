@@ -37,6 +37,7 @@ import TenderAnalysisModal from "./TenderAnalysisModal";
 import TechnicalComplianceMatrix from "./TechnicalComplianceMatrix";
 import TenderGapAnalysisModal from "./TenderGapAnalysisModal";
 import TenderMilestonesTimeline from "./TenderMilestonesTimeline";
+import BidStudio from "./BidStudio";
 
 export type TenderSummary = {
     total_tenders: number;
@@ -146,6 +147,7 @@ export default function TenderRegistry({
     const [technicalMatrixTender, setTechnicalMatrixTender] = useState<TenderItem | null>(null);
     const [gapAnalysisModalTender, setGapAnalysisModalTender] = useState<TenderItem | null>(null);
     const [milestonesModalTender, setMilestonesModalTender] = useState<TenderItem | null>(null);
+    const [bidStudioTender, setBidStudioTender] = useState<TenderItem | null>(null);
 
     // Form feedback
     const [submitting, setSubmitting] = useState(false);
@@ -633,8 +635,20 @@ export default function TenderRegistry({
                     >
                         <Clock className="w-4 h-4 text-sky-300" />
                         Deadlines & Milestones
-                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
-                            Phase 6
+                    </button>
+
+                    <button
+                        onClick={() => setSubTab("bid_studio")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                            subTab === "bid_studio"
+                                ? "bg-purple-600 text-white shadow-sm"
+                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                        }`}
+                    >
+                        <Sparkles className="w-4 h-4 text-amber-300" />
+                        AI Bid Studio
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200">
+                            Phase 7
                         </span>
                     </button>
                 </div>
@@ -909,6 +923,71 @@ export default function TenderRegistry({
                                             >
                                                 <Clock className="w-3.5 h-3.5" />
                                                 View Deadlines & Milestones
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Sub-Tab 6: AI Bid Preparation Studio (Phase 7 View) */}
+            {subTab === "bid_studio" && (
+                <div className="space-y-6">
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 sm:p-8 shadow-sm">
+                        <div className="max-w-3xl mx-auto text-center space-y-3">
+                            <div className="w-14 h-14 rounded-2xl bg-purple-50 border border-purple-100 text-purple-600 flex items-center justify-center mx-auto shadow-inner">
+                                <Sparkles className="w-7 h-7 text-purple-600" />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-900">
+                                AI Bid Preparation Studio & Proposal Generator
+                            </h2>
+                            <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">
+                                Generate publication-ready technical and commercial bid proposals, executive summaries, work plans, and standard returnable schedules.
+                                Grounded in live company compliance credentials and formatted to standard Zimbabwean public procurement requirements.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-purple-600" />
+                                Select a Tender to Open Proposal Studio ({data.tenders.length})
+                            </h3>
+                        </div>
+
+                        {data.tenders.length === 0 ? (
+                            <p className="text-xs text-slate-500 py-6 text-center">
+                                No tender opportunities registered yet. Add a tender from the Register tab first.
+                            </p>
+                        ) : (
+                            <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                                {data.tenders.map((t) => (
+                                    <div key={t.id} className="p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                    {t.reference_number}
+                                                </span>
+                                                {renderStatusBadge(t.status)}
+                                                {renderCountdownBadge(t)}
+                                            </div>
+                                            <h4 className="text-sm font-bold text-slate-900">{t.title}</h4>
+                                            <p className="text-xs text-slate-500">
+                                                Entity: <strong className="text-slate-700">{t.procuring_entity}</strong> ({t.entity_type}) · Category: <span className="capitalize">{t.procurement_category}</span>
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setBidStudioTender(t)}
+                                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-semibold hover:bg-purple-700 shadow-sm transition-all"
+                                            >
+                                                <Sparkles className="w-3.5 h-3.5" />
+                                                Open Bid Studio
                                             </button>
                                         </div>
                                     </div>
@@ -1195,6 +1274,15 @@ export default function TenderRegistry({
                                                 Milestones
                                             </button>
 
+                                            <button
+                                                onClick={() => setBidStudioTender(tender)}
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
+                                                title="AI Bid Preparation Studio"
+                                            >
+                                                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                                                Bid Studio
+                                            </button>
+
                                             {canManage && (
                                                 <button
                                                     onClick={() => {
@@ -1334,6 +1422,12 @@ export default function TenderRegistry({
                                     className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm"
                                 >
                                     <Clock className="w-3.5 h-3.5" /> Milestones
+                                </button>
+                                <button
+                                    onClick={() => setBidStudioTender(selectedTender)}
+                                    className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-purple-600 text-white rounded hover:bg-purple-700 shadow-sm"
+                                >
+                                    <Sparkles className="w-3.5 h-3.5" /> Bid Studio
                                 </button>
                                 {canManage && (
                                     <button
@@ -2237,6 +2331,17 @@ export default function TenderRegistry({
                     tenderRef={milestonesModalTender.reference_number}
                     canManage={canManage}
                     onClose={() => setMilestonesModalTender(null)}
+                />
+            )}
+
+            {/* AI BID PREPARATION STUDIO MODAL */}
+            {bidStudioTender && (
+                <BidStudio
+                    tenderId={bidStudioTender.id}
+                    tenderTitle={bidStudioTender.title}
+                    tenderRef={bidStudioTender.reference_number}
+                    canManage={canManage}
+                    onClose={() => setBidStudioTender(null)}
                 />
             )}
         </div>

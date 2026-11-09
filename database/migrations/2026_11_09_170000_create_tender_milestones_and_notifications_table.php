@@ -96,3 +96,4 @@ return new class extends Migration
         Schema::dropIfExists('tender_milestones');
     }
 };
+

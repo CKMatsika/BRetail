@@ -32,3 +32,4 @@ class TenderAlert extends TenantRecord
         return $this->belongsTo(User::class);
     }
 }
+

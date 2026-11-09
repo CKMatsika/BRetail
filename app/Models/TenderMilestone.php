@@ -59,3 +59,4 @@ class TenderMilestone extends TenantRecord
         return (int) now()->diffInHours($this->due_at, false);
     }
 }
+
