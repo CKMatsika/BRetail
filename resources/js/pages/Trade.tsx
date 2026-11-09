@@ -1,6 +1,7 @@
 import { AgingReport, AgingSnapshot } from "../components/ReportViews";
 import React, { useState } from "react";
 import axios from "axios";
+import TradeShareModal from "../components/TradeShareModal";
 import "./Trade.css";
 type Item = {
     prices_include_vat?: boolean;
@@ -50,6 +51,8 @@ type Doc = {
     status?: string;
     total?: string;
     outstanding?: string;
+    customer_email?: string;
+    customer_phone?: string;
     items: Item[];
 };
 type Customer = {
@@ -431,6 +434,7 @@ export default function Trade({
         details: { reference: string; notes?: string; created_at: string }[];
     } | null>(null);
     const [preview, setPreview] = useState<PreviewData | null>(null);
+    const [shareDoc, setShareDoc] = useState<Doc | null>(null);
     const [items, setItems] = useState<Item[]>([
         {
             variant_id: initialVariant?.id ?? 0,
@@ -2151,6 +2155,13 @@ export default function Trade({
                                 d.documents.filter((x) => x.kind === "quote"),
                                 (q) => (
                                     <>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShareDoc(q)}
+                                            style={{ color: "#2563eb", fontWeight: 600 }}
+                                        >
+                                            Email / WhatsApp
+                                        </button>
                                         {can("sales.quote") &&
                                             !q.quote_closed && (
                                                 <button
@@ -2245,6 +2256,13 @@ export default function Trade({
                                 <>
                                     {i.kind === "invoice" && (
                                         <>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShareDoc(i)}
+                                                style={{ color: "#2563eb", fontWeight: 600 }}
+                                            >
+                                                Email / WhatsApp
+                                            </button>
                                             <button
                                                 onClick={() => {
                                                     setPreview(i);
@@ -2358,9 +2376,20 @@ export default function Trade({
                             currency={d.currency}
                             title="Invoice preview"
                         />
-                        <button onClick={() => setPreview(null)}>
-                            Close preview
-                        </button>
+                        <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                            {"id" in preview && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShareDoc(preview as Doc)}
+                                    style={{ background: "#2563eb", color: "#fff", fontWeight: 600 }}
+                                >
+                                    Email / WhatsApp Document
+                                </button>
+                            )}
+                            <button onClick={() => setPreview(null)}>
+                                Close preview
+                            </button>
+                        </div>
                     </>
                 )}
                 {["bills", "invoices"].includes(tab) &&
@@ -2724,6 +2753,21 @@ export default function Trade({
                         </>
                     )}
                 </section>
+            )}
+
+            {shareDoc && (
+                <TradeShareModal
+                    isOpen={true}
+                    onClose={() => setShareDoc(null)}
+                    documentId={shareDoc.id}
+                    documentNumber={shareDoc.number}
+                    documentKind={shareDoc.kind}
+                    customerName={shareDoc.party_name}
+                    totalAmount={shareDoc.total || "0.00"}
+                    currency={d.currency}
+                    initialEmail={shareDoc.customer_email}
+                    initialPhone={shareDoc.customer_phone}
+                />
             )}
         </div>
     );

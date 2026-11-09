@@ -20,6 +20,7 @@ Route::middleware('guest')->group(function () {
 });
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth');
 Route::get('/subscription', [\App\Http\Controllers\SubscriptionStatusController::class, 'show'])->middleware('auth');
+Route::get('/portal/document/{id}', [TradeController::class, 'publicDocument'])->name('portal.document.public')->middleware('signed');
 Route::middleware(['auth', 'platform'])->prefix('platform')->group(function () {
     Route::get('/organizations', [\App\Http\Controllers\PlatformOrganizationController::class, 'index']);
     Route::patch('/organizations/{tenantId}/subscription', [\App\Http\Controllers\PlatformOrganizationController::class, 'updateSubscription']);

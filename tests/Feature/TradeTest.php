@@ -772,4 +772,77 @@ class TradeTest extends TestCase
         $this->assertSame('-500.0000', $this->balance('payable'));
         $this->assertSame('500.0000', $this->balance($cogsAccount->id));
     }
+
+    public function test_trade_document_share_info_and_whatsapp_link(): void
+    {
+        $this->receive($this->order(), '5');
+        $q = $this->quote();
+        $this->actingAs($this->u);
+
+        $res = $this->getJson("/trade/documents/{$q->id}/share-info")
+            ->assertOk();
+
+        $res->assertJsonStructure([
+            'document_id',
+            'number',
+            'kind',
+            'party_name',
+            'total',
+            'currency',
+            'recipient_email',
+            'recipient_phone',
+            'signed_url',
+            'whatsapp_url',
+            'default_subject',
+            'default_message',
+        ]);
+
+        $this->assertSame($q->id, $res->json('document_id'));
+        $this->assertStringContainsString('https://wa.me/', $res->json('whatsapp_url'));
+        $this->assertStringContainsString('/portal/document/'.$q->id, $res->json('signed_url'));
+    }
+
+    public function test_trade_document_send_email(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+        $this->receive($this->order(), '5');
+        $q = $this->quote();
+        $this->actingAs($this->u);
+
+        $res = $this->postJson("/trade/documents/{$q->id}/send-email", [
+            'email' => 'client@hararetrading.co.zw',
+            'subject' => 'Official Quote #'.$q->number,
+            'message' => 'Please find your quotation attached.',
+        ])->assertOk();
+
+        $res->assertJsonPath('success', true);
+
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\TradeDocumentMail::class, function ($mail) use ($q) {
+            return $mail->hasTo('client@hararetrading.co.zw') &&
+                   $mail->document->id === $q->id;
+        });
+    }
+
+    public function test_public_document_signed_portal_view(): void
+    {
+        $this->receive($this->order(), '5');
+        $q = $this->quote();
+
+        $signedUrl = \Illuminate\Support\Facades\URL::temporarySignedRoute(
+            'portal.document.public',
+            now()->addDays(60),
+            ['id' => $q->id]
+        );
+
+        // Guest can view document via valid signed URL
+        $this->get($signedUrl)
+            ->assertOk()
+            ->assertSee($q->number)
+            ->assertSee('WhatsApp')
+            ->assertSee('Print / Save PDF');
+
+        // Tampered signature returns 403
+        $tamperedUrl = $signedUrl.'invalid';
+        $this->get($tamperedUrl)->assertForbidden();
+    }
 }

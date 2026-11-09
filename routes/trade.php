@@ -9,6 +9,8 @@ Route::middleware(['module:accounting', 'module:inventory'])->prefix('trade')->c
     Route::patch('/customers/{id}', 'updateCustomer');
     Route::delete('/customers/{id}', 'deleteCustomer');
     Route::get('/history/{id}', 'history');
+    Route::get('/documents/{id}/share-info', 'shareInfo')->whereNumber('id');
+    Route::post('/documents/{id}/send-email', 'sendEmail')->whereNumber('id');
     Route::get('/print/{kind}/{id}', 'print')->where('kind', 'order|document');
     Route::post('/{action}/{id?}', 'action')->where('action', 'suppliers|orders|approve|cancel|receipts|bills|direct-bills|customers|credits|quote-preview|quotes|invoices|invoice-preview|invoice-edits|invoice-details|settlements|returns|openings');
 });

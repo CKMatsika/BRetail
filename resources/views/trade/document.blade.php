@@ -24,7 +24,19 @@
 </style>
 </head>
 <body>
-<div class="toolbar"><span>{{ $title }} preview</span><button onclick="window.print()">Print document</button></div>
+<div class="toolbar">
+    <span>{{ $title }} · {{ $document['number'] }}</span>
+    <div style="display:flex;gap:10px;align-items:center;">
+        @php
+            $waPhone = preg_replace('/[^0-9]/', '', $document['customer_phone'] ?? '');
+            $shareText = rawurlencode("Hello, please find your {$title} #{$document['number']} totaling {$currency} " . number_format((float) ($document['total'] ?? 0), 2) . ". View here: " . url()->current());
+        @endphp
+        <a href="https://wa.me/{{ $waPhone }}?text={{ $shareText }}" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;border-radius:6px;background:#25D366;color:white;padding:10px 16px;font:600 13px Arial;">
+            <span>Share on WhatsApp</span>
+        </a>
+        <button onclick="window.print()">Print / Save PDF</button>
+    </div>
+</div>
 <main class="sheet">
 <header class="header">
 <div class="brand">

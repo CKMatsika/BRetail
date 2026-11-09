@@ -24,7 +24,11 @@ use App\Services\TradeCurrency;
 use App\Services\TradeLedger;
 use App\Services\TradePurchasing;
 use App\Services\TradeSales;
+use App\Mail\TradeDocumentMail;
+use App\Services\Audit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 
 final class TradeController
@@ -120,5 +124,91 @@ final class TradeController
         AccountingAccess::branch($r->user(), Warehouse::findOrFail($doc->warehouse_id)->branch_id);
 
         return view('trade.document', ['document' => $doc instanceof TradeDocument ? app(\App\Services\TradeDocuments::class)->present($doc) : $doc->toArray(), 'company' => Company::firstOrFail(), 'kind' => $kind === 'order' ? 'Purchase order' : str_replace('_', ' ', $doc->kind)]);
+    }
+
+    public function publicDocument(Request $r, string $id)
+    {
+        $doc = TradeDocument::withoutGlobalScopes()->findOrFail($id);
+        $company = Company::withoutGlobalScopes()->where('tenant_id', $doc->tenant_id)->first() ?? Company::firstOrFail();
+        $kind = str_replace('_', ' ', $doc->kind);
+
+        return view('trade.document', [
+            'document' => app(\App\Services\TradeDocuments::class)->present($doc),
+            'company' => $company,
+            'kind' => $kind,
+            'is_public' => true,
+        ]);
+    }
+
+    public function shareInfo(Request $r, string $id)
+    {
+        $doc = TradeDocument::findOrFail($id);
+        $purchase = in_array($doc->kind, ['receipt', 'bill', 'supplier_payment', 'opening_payable']);
+        abort_unless($this->allowed($r, $purchase ? 'purchasing' : 'sales'), 403);
+
+        $company = Company::firstOrFail();
+        $presented = app(\App\Services\TradeDocuments::class)->present($doc);
+        $kind = ucwords(str_replace('_', ' ', $doc->kind));
+        $signedUrl = URL::temporarySignedRoute('portal.document.public', now()->addDays(60), ['id' => $doc->id]);
+
+        $recipientEmail = $presented['customer_email'] ?? '';
+        $recipientPhone = $presented['customer_phone'] ?? '';
+        $cleanPhone = preg_replace('/[^0-9]/', '', $recipientPhone);
+
+        $defaultSubject = "{$kind} #{$presented['number']} from {$company->name}";
+        $defaultMessage = "Dear {$presented['party_name']},\n\nPlease find your {$kind} #{$presented['number']} from {$company->name} totaling {$company->base_currency} " . number_format((float) ($doc->total ?? 0), 2) . ".\n\nYou can view and download your official document here:\n{$signedUrl}\n\nThank you for your business!";
+
+        $whatsappUrl = "https://wa.me/{$cleanPhone}?text=" . rawurlencode($defaultMessage);
+
+        return response()->json([
+            'document_id' => $doc->id,
+            'number' => $presented['number'],
+            'kind' => $kind,
+            'party_name' => $presented['party_name'],
+            'total' => number_format((float) ($doc->total ?? 0), 2),
+            'currency' => $company->base_currency,
+            'recipient_email' => $recipientEmail,
+            'recipient_phone' => $recipientPhone,
+            'signed_url' => $signedUrl,
+            'whatsapp_url' => $whatsappUrl,
+            'default_subject' => $defaultSubject,
+            'default_message' => $defaultMessage,
+        ]);
+    }
+
+    public function sendEmail(Request $r, string $id)
+    {
+        $validated = $r->validate([
+            'email' => 'required|email|max:190',
+            'subject' => 'nullable|string|max:200',
+            'message' => 'nullable|string|max:5000',
+        ]);
+
+        $doc = TradeDocument::findOrFail($id);
+        $purchase = in_array($doc->kind, ['receipt', 'bill', 'supplier_payment', 'opening_payable']);
+        abort_unless($this->allowed($r, $purchase ? 'purchasing' : 'sales'), 403);
+
+        $company = Company::firstOrFail();
+        $presented = app(\App\Services\TradeDocuments::class)->present($doc);
+        $kind = ucwords(str_replace('_', ' ', $doc->kind));
+        $signedUrl = URL::temporarySignedRoute('portal.document.public', now()->addDays(60), ['id' => $doc->id]);
+
+        $subject = $validated['subject'] ?: "{$kind} #{$presented['number']} from {$company->name}";
+        $message = $validated['message'] ?? null;
+
+        Mail::to($validated['email'])->send(
+            new TradeDocumentMail($doc, $company, $subject, $message, $signedUrl, $presented)
+        );
+
+        Audit::record('trade.document_emailed', (string) $doc->id, [
+            'email' => $validated['email'],
+            'kind' => $doc->kind,
+            'number' => $presented['number'],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$kind} successfully emailed to {$validated['email']}.",
+        ]);
     }
 }
