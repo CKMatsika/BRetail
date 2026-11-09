@@ -99,6 +99,26 @@ class Tender extends TenantRecord
         return $this->hasMany(TenderPricingEstimate::class)->latest('id');
     }
 
+    public function approvals(): HasMany
+    {
+        return $this->hasMany(TenderApproval::class)->orderBy('id');
+    }
+
+    public function submission(): HasOne
+    {
+        return $this->hasOne(TenderSubmission::class);
+    }
+
+    public function openingRecord(): HasOne
+    {
+        return $this->hasOne(TenderOpeningRecord::class);
+    }
+
+    public function outcome(): HasOne
+    {
+        return $this->hasOne(TenderOutcome::class);
+    }
+
     public function assignedEmployee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'assigned_employee_id');

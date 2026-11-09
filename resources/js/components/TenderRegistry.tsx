@@ -32,6 +32,8 @@ import {
     Sparkles,
     ShieldCheck,
     Calculator,
+    Send,
+    BarChart3,
 } from "lucide-react";
 import ComplianceCenter, { ComplianceData } from "./ComplianceCenter";
 import TenderAnalysisModal from "./TenderAnalysisModal";
@@ -40,6 +42,8 @@ import TenderGapAnalysisModal from "./TenderGapAnalysisModal";
 import TenderMilestonesTimeline from "./TenderMilestonesTimeline";
 import BidStudio from "./BidStudio";
 import TenderPricingStudio from "./TenderPricingStudio";
+import TenderSubmissionModal from "./TenderSubmissionModal";
+import TenderReportsDashboard from "./TenderReportsDashboard";
 
 export type TenderSummary = {
     total_tenders: number;
@@ -129,7 +133,7 @@ export default function TenderRegistry({
     canManage,
     canManageCompliance,
 }: Props) {
-    const [subTab, setSubTab] = useState<"opportunities" | "compliance" | "ai_analysis" | "tech_specs" | "gap_analysis" | "milestones" | "bid_studio" | "pricing">("opportunities");
+    const [subTab, setSubTab] = useState<"opportunities" | "compliance" | "ai_analysis" | "tech_specs" | "gap_analysis" | "milestones" | "bid_studio" | "pricing" | "submissions" | "reports">("opportunities");
     const [data, setData] = useState<TenderData | null>(initialData ?? null);
     const [loading, setLoading] = useState(!initialData);
     const [search, setSearch] = useState("");
@@ -151,6 +155,7 @@ export default function TenderRegistry({
     const [milestonesModalTender, setMilestonesModalTender] = useState<TenderItem | null>(null);
     const [bidStudioTender, setBidStudioTender] = useState<TenderItem | null>(null);
     const [pricingStudioTender, setPricingStudioTender] = useState<TenderItem | null>(null);
+    const [submissionModalTender, setSubmissionModalTender] = useState<TenderItem | null>(null);
 
     // Form feedback
     const [submitting, setSubmitting] = useState(false);
@@ -669,6 +674,36 @@ export default function TenderRegistry({
                             Phase 8
                         </span>
                     </button>
+
+                    <button
+                        onClick={() => setSubTab("submissions")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                            subTab === "submissions"
+                                ? "bg-slate-900 text-white shadow-sm"
+                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                        }`}
+                    >
+                        <Send className="w-4 h-4 text-emerald-400" />
+                        Approvals & Submission
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-300">
+                            Phase 9
+                        </span>
+                    </button>
+
+                    <button
+                        onClick={() => setSubTab("reports")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                            subTab === "reports"
+                                ? "bg-indigo-700 text-white shadow-sm"
+                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                        }`}
+                    >
+                        <BarChart3 className="w-4 h-4 text-indigo-300" />
+                        Reports & Win/Loss
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200">
+                            Phase 10
+                        </span>
+                    </button>
                 </div>
 
                 {subTab === "opportunities" && canManage && (
@@ -1079,6 +1114,86 @@ export default function TenderRegistry({
                     </div>
                 </div>
             )}
+
+            {/* Sub-Tab 8: Tender Approvals & Submission Studio (Phase 9 View) */}
+            {subTab === "submissions" && (
+                <div className="space-y-6">
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 sm:p-8 shadow-sm">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-xl font-bold text-slate-900">
+                                        Tender Approvals & Submission Management
+                                    </h2>
+                                    <span className="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
+                                        Phase 9
+                                    </span>
+                                </div>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    Manage 3-tier corporate sign-offs (Technical, Commercial, Executive), verify pre-submission gate checklists, record official eGP / physical deposit proof, and track public tender opening minutes.
+                                </p>
+                            </div>
+                        </div>
+
+                        {data?.tenders.length === 0 ? (
+                            <div className="py-12 text-center text-slate-500">
+                                <Send className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                                <h3 className="text-base font-semibold text-slate-800">No tenders created yet</h3>
+                                <p className="text-sm text-slate-500 mt-1">Create or import an active tender opportunity first.</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-slate-100 mt-4">
+                                {data?.tenders.map((t) => (
+                                    <div
+                                        key={t.id}
+                                        className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/70 p-4 rounded-xl transition"
+                                    >
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded bg-slate-100 text-slate-700">
+                                                    {t.reference_number}
+                                                </span>
+                                                <h3 className="text-base font-bold text-slate-900">{t.title}</h3>
+                                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                                    t.status === "submitted"
+                                                        ? "bg-purple-100 text-purple-800 border border-purple-200"
+                                                        : t.status === "awarded"
+                                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                                        : "bg-slate-100 text-slate-700"
+                                                }`}>
+                                                    Status: {t.status}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-500">
+                                                Entity: <strong className="text-slate-700">{t.procuring_entity}</strong> ({t.entity_type}) &bull; Closing: <span className="font-semibold text-slate-700">{new Date(t.closing_at).toLocaleDateString()}</span>
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setSubmissionModalTender(t)}
+                                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 shadow-sm transition-all"
+                                            >
+                                                <Send className="w-3.5 h-3.5 text-emerald-400" />
+                                                Approvals & Submission
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Sub-Tab 9: Executive Reports, Analytics & Win/Loss (Phase 10 View) */}
+            {subTab === "reports" && (
+                <TenderReportsDashboard
+                    tenders={data?.tenders || []}
+                    canManage={canManage}
+                    onRefreshTenders={refreshData}
+                />
+            )}
             {subTab === "opportunities" && (
                 <>
                     {/* Feedback Alerts */}
@@ -1374,6 +1489,15 @@ export default function TenderRegistry({
                                                 Pricing & BOQ
                                             </button>
 
+                                            <button
+                                                onClick={() => setSubmissionModalTender(tender)}
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-300 transition-colors"
+                                                title="Approvals & Submission Studio"
+                                            >
+                                                <Send className="w-3.5 h-3.5 text-slate-700" />
+                                                Submission
+                                            </button>
+
                                             {canManage && (
                                                 <button
                                                     onClick={() => {
@@ -1525,6 +1649,12 @@ export default function TenderRegistry({
                                     className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-emerald-600 text-white rounded hover:bg-emerald-700 shadow-sm"
                                 >
                                     <Calculator className="w-3.5 h-3.5" /> Pricing & BOQ
+                                </button>
+                                <button
+                                    onClick={() => setSubmissionModalTender(selectedTender)}
+                                    className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-slate-900 text-white rounded hover:bg-slate-800 shadow-sm"
+                                >
+                                    <Send className="w-3.5 h-3.5 text-emerald-400" /> Approvals & Submission
                                 </button>
                                 {canManage && (
                                     <button
@@ -2447,6 +2577,18 @@ export default function TenderRegistry({
                 <TenderPricingStudio
                     tenderId={pricingStudioTender.id}
                     onClose={() => setPricingStudioTender(null)}
+                />
+            )}
+
+            {/* TENDER APPROVALS & SUBMISSION MODAL */}
+            {submissionModalTender && (
+                <TenderSubmissionModal
+                    tenderId={submissionModalTender.id}
+                    canManage={canManage}
+                    onClose={() => setSubmissionModalTender(null)}
+                    onStatusChange={() => {
+                        refreshData();
+                    }}
                 />
             )}
         </div>

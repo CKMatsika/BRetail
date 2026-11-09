@@ -141,6 +141,20 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderPr
     Route::get('/tenders/{tenderId}/pricing/export-csv', 'exportCsv')->whereNumber('tenderId');
 });
 
+Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderSubmissionController::class)->group(function () {
+    Route::get('/tenders/{tenderId}/submissions', 'show')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/approvals', 'recordApproval')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/submissions', 'recordSubmission')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/opening-minutes', 'recordOpening')->whereNumber('tenderId');
+});
+
+Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderAnalyticsController::class)->group(function () {
+    Route::get('/tenders/analytics/dashboard', 'dashboard');
+    Route::get('/tenders/{tenderId}/outcome', 'showOutcome')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/outcome', 'recordOutcome')->whereNumber('tenderId');
+    Route::get('/tenders/{tenderId}/audit-export', 'exportAuditCsv')->whereNumber('tenderId');
+});
+
 Route::middleware(['auth','tenant'])->group(base_path('routes/international.php'));
 Route::middleware(['auth','tenant'])->group(base_path('routes/hr.php'));
 Route::get('/currencies', [\App\Http\Controllers\InternationalController::class,'page'])->middleware(['auth','tenant','module:currencies','module:accounting','module:inventory']);
