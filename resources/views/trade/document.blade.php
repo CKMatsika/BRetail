@@ -9,6 +9,11 @@
     $title = ucwords($kind);
     $due = $document['due_on'] ?? $document['expected_on'] ?? null;
     $dueLabel = str_contains(strtolower($kind), 'quote') ? 'Valid until' : (str_contains(strtolower($kind), 'order') ? 'Expected on' : 'Due date');
+    $isQuoteOrInvoice = in_array(strtolower($kind), ['invoice', 'quote', 'quotation'], true);
+    $docTotal = (float) ($document['total'] ?? 0);
+    $docOutstanding = isset($outstanding) ? (float) $outstanding : $docTotal;
+    $documentPaid = ($isPaid ?? false) || (strtolower($kind) === 'invoice' && $docOutstanding <= 0);
+    $canPayOnline = $isQuoteOrInvoice && ! $documentPaid && $docTotal > 0;
 @endphp
 <!doctype html>
 <html lang="en">
@@ -27,7 +32,7 @@
 <div class="toolbar">
     <span>{{ $title }} · {{ $document['number'] }}</span>
     <div style="display:flex;gap:10px;align-items:center;">
-        @if($canPayOnline ?? false)
+        @if($canPayOnline)
             <form method="POST" action="{{ route('portal.paynow.initiate', $document['id']) }}" style="margin:0;display:inline;">
                 @csrf
                 <button type="submit" style="border:0;border-radius:6px;background:#008751;color:white;padding:10px 18px;font:700 13px Arial;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
@@ -77,6 +82,21 @@
     @endif
 </div>
 </header>
+@if($canPayOnline)
+<div style="margin:20px 0;padding:16px 20px;background:#f0fdf4;border:2px solid #008751;border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;break-inside:avoid;">
+    <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#166534;">Online Payment Available</div>
+        <div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:2px;">Pay with Paynow (EcoCash, OneMoney, InnBucks, Card)</div>
+        <div style="font-size:13px;color:#334155;margin-top:2px;">Amount to pay: <strong style="color:#008751;font-size:15px;">{{ $currency }} {{ $money($docOutstanding) }}</strong></div>
+    </div>
+    <form method="POST" action="{{ route('portal.paynow.initiate', $document['id']) }}" style="margin:0;">
+        @csrf
+        <button type="submit" style="background:#008751;color:#fff;border:0;border-radius:6px;padding:12px 24px;font:700 14px Arial;cursor:pointer;box-shadow:0 4px 12px rgba(0,135,81,0.25);">
+            ⚡ Pay {{ $currency }} {{ $money($docOutstanding) }} Now →
+        </button>
+    </form>
+</div>
+@endif
 @if($document['superseded'] ?? false)<p class="notice">Previous version · This document has been edited. Use the latest version for current amounts.</p>@endif
 @if(($document['book'] ?? '') !== 'live')<p class="notice">{{ strtoupper($document['book'] ?? 'training') }} · Training document</p>@endif
 <section class="details">
@@ -91,19 +111,19 @@
 <div class="summary"><dl class="totals">@if(isset($document['net']))<div><dt>Subtotal (excl. VAT)</dt><dd>{{ $money($document['net']) }}</dd></div><div><dt>VAT</dt><dd>{{ $money($document['tax']) }}</dd></div>@endif @if(isset($document['total']))<div class="grand"><dt>Total {{ $currency }}</dt><dd>{{ $money($document['total']) }}</dd></div>@endif</dl></div>
 @if(!empty($document['currency_snapshot']))<div class="conversion">Original total: {{ $originalCurrency }} {{ $money($document['currency_snapshot']['original_amount']) }}<br>Exchange rate: {{ $document['currency_snapshot']['exchange_rate'] }} {{ $currency }} per {{ $originalCurrency }}</div>@endif
 @if(!empty($document['notes']))<section class="notes"><div class="label">Notes</div><p>{{ $document['notes'] }}</p></section>@endif
-@if($canPayOnline ?? false)
+@if($canPayOnline)
 <section id="paynow" style="margin-top:28px;border:2px solid #008751;border-radius:8px;padding:20px 24px;background:#f0fdf4;break-inside:avoid;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
         <div>
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#166534;">Instant Online Payment</div>
             <div style="font-size:16px;font-weight:700;color:#0f172a;margin-top:2px;">Pay with Paynow Zimbabwe</div>
             <div style="font-size:12px;color:#475569;margin-top:4px;">EcoCash · OneMoney · InnBucks · Zimswitch · Visa · Mastercard</div>
-            <div style="font-size:13px;color:#1e293b;margin-top:6px;">Outstanding: <strong>{{ $currency }} {{ $money($outstanding ?? $document['total']) }}</strong></div>
+            <div style="font-size:13px;color:#1e293b;margin-top:6px;">Outstanding: <strong>{{ $currency }} {{ $money($docOutstanding) }}</strong></div>
         </div>
         <form method="POST" action="{{ route('portal.paynow.initiate', $document['id']) }}" style="margin:0;">
             @csrf
             <button type="submit" style="background:#008751;color:#fff;border:0;border-radius:6px;padding:12px 24px;font:700 14px Arial;cursor:pointer;box-shadow:0 4px 12px rgba(0,135,81,0.25);">
-                ⚡ Pay {{ $currency }} {{ $money($outstanding ?? $document['total']) }} Now →
+                ⚡ Pay {{ $currency }} {{ $money($docOutstanding) }} Now →
             </button>
         </form>
     </div>
