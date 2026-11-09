@@ -96,6 +96,14 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderTe
     Route::get('/tenders/{tenderId}/technical-specs/export', 'export')->whereNumber('tenderId');
 });
 
+Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderGapAnalysisController::class)->group(function () {
+    Route::get('/tenders/{tenderId}/gap-analysis', 'show')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/gap-analysis/evaluate', 'evaluate')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/gap-analysis/override', 'recordOverride')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/gap-analysis/action-item', 'updateActionItem')->whereNumber('tenderId');
+    Route::get('/tenders/{tenderId}/gap-analysis/export', 'exportCsv')->whereNumber('tenderId');
+});
+
 Route::middleware(['auth','tenant'])->group(base_path('routes/international.php'));
 Route::middleware(['auth','tenant'])->group(base_path('routes/hr.php'));
 Route::get('/currencies', [\App\Http\Controllers\InternationalController::class,'page'])->middleware(['auth','tenant','module:currencies','module:accounting','module:inventory']);

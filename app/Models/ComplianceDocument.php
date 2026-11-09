@@ -90,5 +90,10 @@ class ComplianceDocument extends TenantRecord
 
         return (int) $today->diffInDays($expiry, false);
     }
+
+    public function isExpired(?string $todayStr = null): bool
+    {
+        return $this->calculateComputedStatus($todayStr) === 'expired';
+    }
 }
 
