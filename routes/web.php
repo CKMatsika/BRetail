@@ -131,6 +131,16 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\BidStudi
     Route::get('/tenders/{tenderId}/bid-proposal/export-doc', 'exportDoc')->whereNumber('tenderId');
 });
 
+Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderPricingController::class)->group(function () {
+    Route::get('/tenders/{tenderId}/pricing', 'show')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/pricing/items', 'storeItem')->whereNumber('tenderId');
+    Route::patch('/tenders/pricing/items/{itemId}', 'updateItem')->whereNumber('itemId');
+    Route::delete('/tenders/pricing/items/{itemId}', 'destroyItem')->whereNumber('itemId');
+    Route::patch('/tenders/{tenderId}/pricing/settings', 'updateSettings')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/pricing/approve', 'approve')->whereNumber('tenderId');
+    Route::get('/tenders/{tenderId}/pricing/export-csv', 'exportCsv')->whereNumber('tenderId');
+});
+
 Route::middleware(['auth','tenant'])->group(base_path('routes/international.php'));
 Route::middleware(['auth','tenant'])->group(base_path('routes/hr.php'));
 Route::get('/currencies', [\App\Http\Controllers\InternationalController::class,'page'])->middleware(['auth','tenant','module:currencies','module:accounting','module:inventory']);

@@ -28,3 +28,4 @@ class BidStandardDocument extends TenantRecord
         return $this->belongsTo(User::class, 'created_by_user_id');
     }
 }
+

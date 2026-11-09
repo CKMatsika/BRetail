@@ -223,3 +223,4 @@ class BidStudioController extends Controller
         ]);
     }
 }
+

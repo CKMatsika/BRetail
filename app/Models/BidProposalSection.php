@@ -27,3 +27,4 @@ class BidProposalSection extends TenantRecord
         return $this->belongsTo(User::class, 'last_edited_by_user_id');
     }
 }
+

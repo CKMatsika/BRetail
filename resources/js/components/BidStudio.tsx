@@ -826,3 +826,4 @@ export default function BidStudio({
         </div>
     );
 }
+

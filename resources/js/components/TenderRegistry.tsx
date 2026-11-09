@@ -31,6 +31,7 @@ import {
     FileCode,
     Sparkles,
     ShieldCheck,
+    Calculator,
 } from "lucide-react";
 import ComplianceCenter, { ComplianceData } from "./ComplianceCenter";
 import TenderAnalysisModal from "./TenderAnalysisModal";
@@ -38,6 +39,7 @@ import TechnicalComplianceMatrix from "./TechnicalComplianceMatrix";
 import TenderGapAnalysisModal from "./TenderGapAnalysisModal";
 import TenderMilestonesTimeline from "./TenderMilestonesTimeline";
 import BidStudio from "./BidStudio";
+import TenderPricingStudio from "./TenderPricingStudio";
 
 export type TenderSummary = {
     total_tenders: number;
@@ -127,7 +129,7 @@ export default function TenderRegistry({
     canManage,
     canManageCompliance,
 }: Props) {
-    const [subTab, setSubTab] = useState<"opportunities" | "compliance" | "ai_analysis" | "tech_specs">("opportunities");
+    const [subTab, setSubTab] = useState<"opportunities" | "compliance" | "ai_analysis" | "tech_specs" | "gap_analysis" | "milestones" | "bid_studio" | "pricing">("opportunities");
     const [data, setData] = useState<TenderData | null>(initialData ?? null);
     const [loading, setLoading] = useState(!initialData);
     const [search, setSearch] = useState("");
@@ -148,6 +150,7 @@ export default function TenderRegistry({
     const [gapAnalysisModalTender, setGapAnalysisModalTender] = useState<TenderItem | null>(null);
     const [milestonesModalTender, setMilestonesModalTender] = useState<TenderItem | null>(null);
     const [bidStudioTender, setBidStudioTender] = useState<TenderItem | null>(null);
+    const [pricingStudioTender, setPricingStudioTender] = useState<TenderItem | null>(null);
 
     // Form feedback
     const [submitting, setSubmitting] = useState(false);
@@ -651,6 +654,21 @@ export default function TenderRegistry({
                             Phase 7
                         </span>
                     </button>
+
+                    <button
+                        onClick={() => setSubTab("pricing")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                            subTab === "pricing"
+                                ? "bg-emerald-700 text-white shadow-sm"
+                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                        }`}
+                    >
+                        <Calculator className="w-4 h-4 text-emerald-300" />
+                        Pricing & BOQ
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            Phase 8
+                        </span>
+                    </button>
                 </div>
 
                 {subTab === "opportunities" && canManage && (
@@ -997,6 +1015,70 @@ export default function TenderRegistry({
                     </div>
                 </div>
             )}
+            {/* Sub-Tab 7: Tender Pricing & Financial Estimator (Phase 8 View) */}
+            {subTab === "pricing" && (
+                <div className="space-y-6">
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 sm:p-8 shadow-sm">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-xl font-bold text-slate-900">
+                                        Tender Pricing, BOQ & Financial Estimator
+                                    </h2>
+                                    <span className="text-xs uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                        PPDPA Compliant
+                                    </span>
+                                </div>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    Prepare structured Bills of Quantities (BOQ), model split currency (USD/ZWG), calculate statutory PRAZ 1% levies, VAT, and check PPDPA Section 52 abnormally low tender risks.
+                                </p>
+                            </div>
+                        </div>
+
+                        {data?.tenders.length === 0 ? (
+                            <div className="py-12 text-center text-slate-500">
+                                <Calculator className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                                <h3 className="text-base font-semibold text-slate-800">No tenders created yet</h3>
+                                <p className="text-sm text-slate-500 mt-1">Create or import an active tender opportunity first.</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-slate-100 mt-4">
+                                {data?.tenders.map((t) => (
+                                    <div
+                                        key={t.id}
+                                        className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/70 p-4 rounded-xl transition"
+                                    >
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded bg-slate-100 text-slate-700">
+                                                    {t.reference_number}
+                                                </span>
+                                                <h3 className="text-base font-bold text-slate-900">{t.title}</h3>
+                                                <span className="text-xs font-medium px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                    Est. Value: {t.currency} {Number(t.estimated_value || 0).toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-500">
+                                                Entity: <strong className="text-slate-700">{t.procuring_entity}</strong> ({t.entity_type}) · Category: <span className="capitalize">{t.procurement_category}</span>
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setPricingStudioTender(t)}
+                                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 shadow-sm transition-all"
+                                            >
+                                                <Calculator className="w-3.5 h-3.5" />
+                                                Pricing & BOQ Studio
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
             {subTab === "opportunities" && (
                 <>
                     {/* Feedback Alerts */}
@@ -1283,6 +1365,15 @@ export default function TenderRegistry({
                                                 Bid Studio
                                             </button>
 
+                                            <button
+                                                onClick={() => setPricingStudioTender(tender)}
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-colors"
+                                                title="Tender Pricing & BOQ Studio"
+                                            >
+                                                <Calculator className="w-3.5 h-3.5 text-emerald-600" />
+                                                Pricing & BOQ
+                                            </button>
+
                                             {canManage && (
                                                 <button
                                                     onClick={() => {
@@ -1428,6 +1519,12 @@ export default function TenderRegistry({
                                     className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-purple-600 text-white rounded hover:bg-purple-700 shadow-sm"
                                 >
                                     <Sparkles className="w-3.5 h-3.5" /> Bid Studio
+                                </button>
+                                <button
+                                    onClick={() => setPricingStudioTender(selectedTender)}
+                                    className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-emerald-600 text-white rounded hover:bg-emerald-700 shadow-sm"
+                                >
+                                    <Calculator className="w-3.5 h-3.5" /> Pricing & BOQ
                                 </button>
                                 {canManage && (
                                     <button
@@ -2342,6 +2439,14 @@ export default function TenderRegistry({
                     tenderRef={bidStudioTender.reference_number}
                     canManage={canManage}
                     onClose={() => setBidStudioTender(null)}
+                />
+            )}
+
+            {/* TENDER PRICING & BOQ STUDIO MODAL */}
+            {pricingStudioTender && (
+                <TenderPricingStudio
+                    tenderId={pricingStudioTender.id}
+                    onClose={() => setPricingStudioTender(null)}
                 />
             )}
         </div>

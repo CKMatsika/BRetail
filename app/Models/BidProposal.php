@@ -46,3 +46,4 @@ class BidProposal extends TenantRecord
         return $this->status === 'finalized';
     }
 }
+
