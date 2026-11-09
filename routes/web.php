@@ -49,7 +49,7 @@ Route::get('/inventory', [InventoryController::class, 'page'])->middleware(['aut
 Route::middleware(['auth', 'tenant'])->controller(WorkspaceController::class)->group(function () {
     Route::post('/company/logo', [CompanyLogoController::class, 'store'])->middleware('module:administration');
     Route::get('/company/logo', [CompanyLogoController::class, 'show']);
-    foreach (['dashboard' => 'dashboard', 'branches' => 'branches', 'team' => 'access', 'company' => 'administration', 'modules' => 'administration', 'audit' => 'administration'] as $section => $module) {
+    foreach (['dashboard' => 'dashboard', 'branches' => 'branches', 'team' => 'access', 'company' => 'administration', 'modules' => 'administration', 'audit' => 'administration', 'tenders' => 'administration'] as $section => $module) {
         Route::get('/'.$section, 'page')->defaults('section', $section)->middleware('module:'.$module);
     }
     Route::post('/branches', 'storeBranch')->middleware('module:branches');
@@ -58,6 +58,14 @@ Route::middleware(['auth', 'tenant'])->controller(WorkspaceController::class)->g
     Route::patch('/team/{id}', 'updateUser')->middleware('module:access');
     Route::patch('/modules/{key}', 'module')->middleware('module:administration');
     Route::patch('/company', 'company')->middleware('module:administration');
+});
+
+Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\ComplianceController::class)->group(function () {
+    Route::get('/compliance/data', 'data');
+    Route::post('/compliance/store', 'store');
+    Route::post('/compliance/mark-na', 'markNotApplicable');
+    Route::get('/compliance/download/{id}', 'download');
+    Route::get('/compliance/history/{id}', 'history');
 });
 
 Route::middleware(['auth','tenant'])->group(base_path('routes/international.php'));

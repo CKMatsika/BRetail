@@ -9,6 +9,7 @@ import Payroll, { PayrollData } from "./Payroll";
 import DeviceManager from "./DeviceManager";
 import Reports, { AnalyticsData } from "./Reports";
 import Loyalty, { LoyaltyData } from "./Loyalty";
+import ComplianceCenter, { ComplianceData } from "../components/ComplianceCenter";
 import { useDialog } from "../useDialog";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import {
@@ -74,6 +75,7 @@ type Props = InventoryProps &
         payroll?: PayrollData;
         analytics?: AnalyticsData;
         loyalty?: LoyaltyData;
+        compliance?: ComplianceData;
         user: { id: number; name: string };
         role: string;
         permissions: string[];
@@ -132,6 +134,12 @@ const nav = [
         label: "Procurement",
         icon: Truck,
         permission: "purchasing.view",
+    },
+    {
+        key: "tenders",
+        label: "Tenders & Compliance",
+        icon: ShieldCheck,
+        permission: "compliance.view",
     },
     {
         key: "sales",
@@ -217,6 +225,7 @@ const navigationOrder = [
     "pos",
     "sales",
     "purchasing",
+    "tenders",
     "inventory",
     "loyalty",
     "backoffice",
@@ -605,6 +614,7 @@ export default function Workspace(p: Props) {
     );
     const [bm, setBm] = useState<Branch | true | null>(null);
     const [tm, setTm] = useState<Person | true | null>(null);
+    const [companyTab, setCompanyTab] = useState<"general" | "compliance">("general");
     const [search, setSearch] = useState("");
     const [failedLogo, setFailedLogo] = useState<string | null>(null);
     const can = (s: string) =>
@@ -1323,14 +1333,69 @@ export default function Workspace(p: Props) {
                     )}
                     {p.section === "company" && (
                         <>
-                            <CompanyForm
-                                company={p.company}
-                                editable={can("company.configure")}
-                            />
-                            {can("company.configure") && (
-                                <CompanyLogo logoUrl={p.company.logo_url} />
+                            <div style={{ display: "flex", gap: "8px", borderBottom: "1px solid var(--line, #e2e8f0)", marginBottom: "16px", paddingBottom: "8px" }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setCompanyTab("general")}
+                                    style={{
+                                        padding: "8px 16px",
+                                        fontSize: "13px",
+                                        fontWeight: 600,
+                                        borderRadius: "8px",
+                                        border: "1px solid transparent",
+                                        background: companyTab === "general" ? "var(--erp-accent, #1e293b)" : "transparent",
+                                        color: companyTab === "general" ? "#fff" : "inherit",
+                                        cursor: "pointer",
+                                    }}
+                                >
+                                    General Profile & Logo
+                                </button>
+                                {can("compliance.view") && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setCompanyTab("compliance")}
+                                        style={{
+                                            padding: "8px 16px",
+                                            fontSize: "13px",
+                                            fontWeight: 600,
+                                            borderRadius: "8px",
+                                            border: "1px solid transparent",
+                                            background: companyTab === "compliance" ? "var(--erp-accent, #1e293b)" : "transparent",
+                                            color: companyTab === "compliance" ? "#fff" : "inherit",
+                                            cursor: "pointer",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                        }}
+                                    >
+                                        <ShieldCheck size={16} /> Tender & Compliance Documents
+                                    </button>
+                                )}
+                            </div>
+                            {companyTab === "general" && (
+                                <>
+                                    <CompanyForm
+                                        company={p.company}
+                                        editable={can("company.configure")}
+                                    />
+                                    {can("company.configure") && (
+                                        <CompanyLogo logoUrl={p.company.logo_url} />
+                                    )}
+                                </>
+                            )}
+                            {companyTab === "compliance" && (
+                                <ComplianceCenter
+                                    initialData={p.compliance}
+                                    canManage={can("compliance.manage")}
+                                />
                             )}
                         </>
+                    )}
+                    {p.section === "tenders" && (
+                        <ComplianceCenter
+                            initialData={p.compliance}
+                            canManage={can("compliance.manage")}
+                        />
                     )}
                     {p.section === "audit" && (
                         <section className="panel">

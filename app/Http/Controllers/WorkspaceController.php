@@ -45,12 +45,15 @@ class WorkspaceController
     public function page(Request $r, string $section = 'dashboard')
     {
         $permission = match ($section) {
-            'team' => 'users.view','devices' => 'devices.manage','company' => 'company.view','modules' => 'modules.view','audit' => 'audit.view',default => "$section.view"
+            'team' => 'users.view','devices' => 'devices.manage','company' => 'company.view','modules' => 'modules.view','audit' => 'audit.view','tenders' => 'compliance.view',default => "$section.view"
         };
         $this->permit($r, $permission);
         $company = Company::firstOrFail();
         $companyData = $r->user()->canDo('company.view') ? $company->toArray() : [...$company->only('name', 'industry', 'base_currency', 'accepted_currencies', 'logo_url'), 'settings' => []];
         $data = ['section' => $section, 'user' => $r->user()->only('id', 'name', 'email'), 'role' => $r->user()->role->name, 'permissions' => $r->user()->role->permissions, 'company' => $companyData, 'branches' => $this->branches($r)->with('warehouses')->get(), 'modules' => TenantModule::get()->map(fn ($m) => [...$m->toArray(), ...config("modules.$m->key")]), 'templates' => config('retail.templates')];
+        if (in_array($section, ['company', 'tenders'], true) && $r->user()->canDo('compliance.view')) {
+            $data['compliance'] = app(\App\Services\Compliance\ComplianceService::class)->list($r->user());
+        }
         if ($section === 'team') {
             $data['users'] = User::where('tenant_id', $r->user()->tenant_id)->with('role', 'branches')->get()->map(fn ($u) => [...$u->only('id', 'name', 'email', 'active'), 'role' => $u->role?->name, 'role_id' => $u->role_id, 'branch_ids' => $u->branches->pluck('id')]);
             $data['roles'] = Role::get(['id', 'name', 'permissions', 'company_wide']);
