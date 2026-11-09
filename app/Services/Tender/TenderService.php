@@ -25,7 +25,7 @@ final class TenderService
     {
         $this->permit($u, 'tenders.view');
 
-        $query = Tender::with(['assignedEmployee:id,first_name,last_name,designation'])
+        $query = Tender::with(['assignedEmployee:id,legal_name,preferred_name,job_title'])
             ->withCount('documents');
 
         // Search filter
@@ -112,8 +112,8 @@ final class TenderService
                 'notes' => $t->notes,
                 'assigned_employee' => $t->assignedEmployee ? [
                     'id' => $t->assignedEmployee->id,
-                    'name' => trim($t->assignedEmployee->first_name.' '.$t->assignedEmployee->last_name),
-                    'designation' => $t->assignedEmployee->designation,
+                    'name' => $t->assignedEmployee->preferred_name ?: $t->assignedEmployee->legal_name,
+                    'designation' => $t->assignedEmployee->job_title,
                 ] : null,
                 'documents_count' => $t->documents_count,
                 'days_remaining' => $t->daysRemaining(),
@@ -142,12 +142,12 @@ final class TenderService
                 'praz_categories' => TenderCatalog::PRAZ_CATEGORY_CODES,
                 'procuring_entity_presets' => TenderCatalog::PROCURING_ENTITY_PRESETS,
             ],
-            'employees' => Employee::where('active', true)
-                ->get(['id', 'first_name', 'last_name', 'designation'])
+            'employees' => Employee::where('status', 'active')
+                ->get(['id', 'legal_name', 'preferred_name', 'job_title'])
                 ->map(fn ($e) => [
                     'id' => $e->id,
-                    'name' => trim($e->first_name.' '.$e->last_name),
-                    'designation' => $e->designation,
+                    'name' => $e->preferred_name ?: $e->legal_name,
+                    'designation' => $e->job_title,
                 ]),
         ];
     }
@@ -156,7 +156,7 @@ final class TenderService
     {
         $this->permit($u, 'tenders.view');
 
-        $t = Tender::with(['assignedEmployee:id,first_name,last_name,designation', 'documents'])
+        $t = Tender::with(['assignedEmployee:id,legal_name,preferred_name,job_title', 'documents'])
             ->findOrFail($id);
 
         return [
@@ -194,8 +194,8 @@ final class TenderService
                 'notes' => $t->notes,
                 'assigned_employee' => $t->assignedEmployee ? [
                     'id' => $t->assignedEmployee->id,
-                    'name' => trim($t->assignedEmployee->first_name.' '.$t->assignedEmployee->last_name),
-                    'designation' => $t->assignedEmployee->designation,
+                    'name' => $t->assignedEmployee->preferred_name ?: $t->assignedEmployee->legal_name,
+                    'designation' => $t->assignedEmployee->job_title,
                 ] : null,
                 'days_remaining' => $t->daysRemaining(),
                 'hours_remaining' => $t->hoursRemaining(),

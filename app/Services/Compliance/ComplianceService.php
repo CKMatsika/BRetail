@@ -26,7 +26,7 @@ final class ComplianceService
         $this->permit($u, 'compliance.view');
 
         $activeDocs = ComplianceDocument::active()
-            ->with(['responsibleEmployee:id,first_name,last_name,designation', 'previousVersions'])
+            ->with(['responsibleEmployee:id,legal_name,preferred_name,job_title', 'previousVersions'])
             ->get()
             ->keyBy('type_key');
 
@@ -70,8 +70,8 @@ final class ComplianceService
                     'notes' => $doc->notes,
                     'responsible_employee' => $doc->responsibleEmployee ? [
                         'id' => $doc->responsibleEmployee->id,
-                        'name' => trim($doc->responsibleEmployee->first_name.' '.$doc->responsibleEmployee->last_name),
-                        'designation' => $doc->responsibleEmployee->designation,
+                        'name' => $doc->responsibleEmployee->preferred_name ?: $doc->responsibleEmployee->legal_name,
+                        'designation' => $doc->responsibleEmployee->job_title,
                     ] : null,
                     'days_until_expiry' => $days,
                     'is_mandatory' => $std['is_mandatory'],
@@ -142,8 +142,8 @@ final class ComplianceService
                     'notes' => $doc->notes,
                     'responsible_employee' => $doc->responsibleEmployee ? [
                         'id' => $doc->responsibleEmployee->id,
-                        'name' => trim($doc->responsibleEmployee->first_name.' '.$doc->responsibleEmployee->last_name),
-                        'designation' => $doc->responsibleEmployee->designation,
+                        'name' => $doc->responsibleEmployee->preferred_name ?: $doc->responsibleEmployee->legal_name,
+                        'designation' => $doc->responsibleEmployee->job_title,
                     ] : null,
                     'days_until_expiry' => $days,
                     'is_mandatory' => false,
@@ -194,12 +194,12 @@ final class ComplianceService
                 'health_score_percent' => $scorePercent,
                 'praz_categories' => array_values($prazCategories),
             ],
-            'employees' => Employee::where('active', true)
-                ->get(['id', 'first_name', 'last_name', 'designation'])
+            'employees' => Employee::where('status', 'active')
+                ->get(['id', 'legal_name', 'preferred_name', 'job_title'])
                 ->map(fn ($e) => [
                     'id' => $e->id,
-                    'name' => trim($e->first_name.' '.$e->last_name),
-                    'designation' => $e->designation,
+                    'name' => $e->preferred_name ?: $e->legal_name,
+                    'designation' => $e->job_title,
                 ]),
         ];
     }

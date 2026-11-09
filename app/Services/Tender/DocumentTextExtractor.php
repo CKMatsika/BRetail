@@ -329,3 +329,4 @@ final class DocumentTextExtractor
         ];
     }
 }
+
