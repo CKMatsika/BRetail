@@ -99,11 +99,11 @@ export type TenderData = {
     tenders: TenderItem[];
     summary: TenderSummary;
     catalog: {
-        categories: Record<string, string>;
-        methods: Record<string, string>;
-        opportunity_types: Record<string, string>;
-        entity_types: Record<string, string>;
-        praz_categories: Record<string, string>;
+        categories: { key: string; label: string }[];
+        methods: { key: string; label: string }[];
+        opportunity_types: { key: string; label: string }[];
+        entity_types: { key: string; label: string }[];
+        praz_categories: { code: string; name: string }[];
         procuring_entity_presets: string[];
     };
     employees: { id: number; name: string; designation?: string }[];
@@ -804,9 +804,9 @@ export default function TenderRegistry({
                                     className="text-xs border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 >
                                     <option value="all">All Procurement Categories</option>
-                                    {Object.entries(catalog.categories).map(([k, label]) => (
-                                        <option key={k} value={k}>
-                                            {label}
+                                    {(catalog?.categories ?? []).map((c) => (
+                                        <option key={c.key} value={c.key}>
+                                            {c.label}
                                         </option>
                                     ))}
                                 </select>
@@ -833,9 +833,9 @@ export default function TenderRegistry({
                                     className="text-xs border border-slate-300 rounded-lg px-2.5 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 >
                                     <option value="all">All Entity Sectors</option>
-                                    {Object.entries(catalog.entity_types).map(([k, label]) => (
-                                        <option key={k} value={k}>
-                                            {label}
+                                    {(catalog?.entity_types ?? []).map((e) => (
+                                        <option key={e.key} value={e.key}>
+                                            {e.label}
                                         </option>
                                     ))}
                                 </select>
@@ -1343,8 +1343,8 @@ export default function TenderRegistry({
                                             onChange={(e) => setFormData({ ...formData, entity_type: e.target.value })}
                                             className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500"
                                         >
-                                            {Object.entries(catalog.entity_types).map(([k, label]) => (
-                                                <option key={k} value={k}>{label}</option>
+                                            {(catalog?.entity_types ?? []).map((e) => (
+                                                <option key={e.key} value={e.key}>{e.label}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -1414,8 +1414,8 @@ export default function TenderRegistry({
                                             onChange={(e) => setFormData({ ...formData, procurement_category: e.target.value })}
                                             className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500"
                                         >
-                                            {Object.entries(catalog.categories).map(([k, label]) => (
-                                                <option key={k} value={k}>{label}</option>
+                                            {(catalog?.categories ?? []).map((c) => (
+                                                <option key={c.key} value={c.key}>{c.label}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -1428,8 +1428,8 @@ export default function TenderRegistry({
                                             onChange={(e) => setFormData({ ...formData, procurement_method: e.target.value })}
                                             className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500"
                                         >
-                                            {Object.entries(catalog.methods).map(([k, label]) => (
-                                                <option key={k} value={k}>{label}</option>
+                                            {(catalog?.methods ?? []).map((m) => (
+                                                <option key={m.key} value={m.key}>{m.label}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -1442,8 +1442,8 @@ export default function TenderRegistry({
                                             onChange={(e) => setFormData({ ...formData, opportunity_type: e.target.value })}
                                             className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500"
                                         >
-                                            {Object.entries(catalog.opportunity_types).map(([k, label]) => (
-                                                <option key={k} value={k}>{label}</option>
+                                            {(catalog?.opportunity_types ?? []).map((o) => (
+                                                <option key={o.key} value={o.key}>{o.label}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -1454,20 +1454,20 @@ export default function TenderRegistry({
                                         Required PRAZ Supplier Categories
                                     </label>
                                     <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg max-h-32 overflow-y-auto">
-                                        {Object.entries(catalog.praz_categories).map(([code, name]) => {
-                                            const active = formData.praz_categories.includes(code);
+                                        {(catalog?.praz_categories ?? []).map((p) => {
+                                            const active = formData.praz_categories.includes(p.code);
                                             return (
                                                 <button
                                                     type="button"
-                                                    key={code}
-                                                    onClick={() => togglePrazCategory(code)}
+                                                    key={p.code}
+                                                    onClick={() => togglePrazCategory(p.code)}
                                                     className={`text-[11px] px-2 py-0.5 rounded font-mono transition-colors ${
                                                         active
                                                             ? "bg-emerald-600 text-white font-semibold"
                                                             : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-100"
                                                     }`}
                                                 >
-                                                    {code} - {name}
+                                                    {p.code} - {p.name}
                                                 </button>
                                             );
                                         })}
