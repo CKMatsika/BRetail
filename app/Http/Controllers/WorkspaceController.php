@@ -54,6 +54,9 @@ class WorkspaceController
         if (in_array($section, ['company', 'tenders'], true) && $r->user()->canDo('compliance.view')) {
             $data['compliance'] = app(\App\Services\Compliance\ComplianceService::class)->list($r->user());
         }
+        if ($section === 'tenders' && $r->user()->canDo('tenders.view')) {
+            $data['tenders_data'] = app(\App\Services\Tender\TenderService::class)->list($r->user());
+        }
         if ($section === 'team') {
             $data['users'] = User::where('tenant_id', $r->user()->tenant_id)->with('role', 'branches')->get()->map(fn ($u) => [...$u->only('id', 'name', 'email', 'active'), 'role' => $u->role?->name, 'role_id' => $u->role_id, 'branch_ids' => $u->branches->pluck('id')]);
             $data['roles'] = Role::get(['id', 'name', 'permissions', 'company_wide']);

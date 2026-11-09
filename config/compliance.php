@@ -10,3 +10,4 @@ return [
     ],
     'expiry_warning_days' => 30,
 ];
+

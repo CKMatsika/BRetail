@@ -91,3 +91,4 @@ class ComplianceDocument extends TenantRecord
         return (int) $today->diffInDays($expiry, false);
     }
 }
+

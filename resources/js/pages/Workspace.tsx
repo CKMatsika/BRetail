@@ -10,6 +10,7 @@ import DeviceManager from "./DeviceManager";
 import Reports, { AnalyticsData } from "./Reports";
 import Loyalty, { LoyaltyData } from "./Loyalty";
 import ComplianceCenter, { ComplianceData } from "../components/ComplianceCenter";
+import TenderRegistry, { TenderData } from "../components/TenderRegistry";
 import { useDialog } from "../useDialog";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import {
@@ -76,6 +77,7 @@ type Props = InventoryProps &
         analytics?: AnalyticsData;
         loyalty?: LoyaltyData;
         compliance?: ComplianceData;
+        tenders_data?: TenderData;
         user: { id: number; name: string };
         role: string;
         permissions: string[];
@@ -139,7 +141,7 @@ const nav = [
         key: "tenders",
         label: "Tenders & Compliance",
         icon: ShieldCheck,
-        permission: "compliance.view",
+        permission: "tenders.view",
     },
     {
         key: "sales",
@@ -662,6 +664,8 @@ export default function Workspace(p: Props) {
                         .filter(
                             (n) =>
                                 (can(n.permission) ||
+                                    (n.key === "tenders" &&
+                                        can("compliance.view")) ||
                                     (n.key === "backoffice" &&
                                         can("sales.view"))) &&
                                 p.modules.some(
@@ -674,6 +678,7 @@ export default function Workspace(p: Props) {
                                                     company: "administration",
                                                     modules: "administration",
                                                     audit: "administration",
+                                                    tenders: "administration",
                                                 } as Record<string, string>
                                             )[n.key] ?? n.key) && m.enabled,
                                 ),
@@ -1392,9 +1397,11 @@ export default function Workspace(p: Props) {
                         </>
                     )}
                     {p.section === "tenders" && (
-                        <ComplianceCenter
-                            initialData={p.compliance}
-                            canManage={can("compliance.manage")}
+                        <TenderRegistry
+                            initialData={p.tenders_data}
+                            complianceData={p.compliance}
+                            canManage={can("tenders.manage")}
+                            canManageCompliance={can("compliance.manage")}
                         />
                     )}
                     {p.section === "audit" && (

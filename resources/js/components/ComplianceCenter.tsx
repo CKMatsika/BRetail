@@ -996,3 +996,4 @@ export default function ComplianceCenter({ initialData, canManage }: Props) {
         </div>
     );
 }
+

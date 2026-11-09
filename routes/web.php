@@ -68,6 +68,17 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\Complian
     Route::get('/compliance/history/{id}', 'history');
 });
 
+Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderController::class)->group(function () {
+    Route::get('/tenders/data', 'data');
+    Route::get('/tenders/{id}', 'show')->whereNumber('id');
+    Route::post('/tenders', 'store');
+    Route::patch('/tenders/{id}', 'update')->whereNumber('id');
+    Route::patch('/tenders/{id}/status', 'updateStatus')->whereNumber('id');
+    Route::post('/tenders/{id}/documents', 'uploadDocument')->whereNumber('id');
+    Route::get('/tenders/documents/{documentId}/download', 'downloadDocument')->whereNumber('documentId');
+    Route::delete('/tenders/documents/{documentId}', 'deleteDocument')->whereNumber('documentId');
+});
+
 Route::middleware(['auth','tenant'])->group(base_path('routes/international.php'));
 Route::middleware(['auth','tenant'])->group(base_path('routes/hr.php'));
 Route::get('/currencies', [\App\Http\Controllers\InternationalController::class,'page'])->middleware(['auth','tenant','module:currencies','module:accounting','module:inventory']);

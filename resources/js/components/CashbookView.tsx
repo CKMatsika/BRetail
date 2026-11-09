@@ -900,3 +900,4 @@ export function CashbookView({
         </div>
     );
 }
+
