@@ -310,3 +310,4 @@ class TenderTechnicalSpecTest extends TestCase
         $resDel->assertNotFound();
     }
 }
+

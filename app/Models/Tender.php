@@ -64,6 +64,21 @@ class Tender extends TenantRecord
         return $this->hasOne(TenderGapAnalysis::class)->latestOfMany();
     }
 
+    public function milestones(): HasMany
+    {
+        return $this->hasMany(TenderMilestone::class)->orderBy('due_at');
+    }
+
+    public function clarifications(): HasMany
+    {
+        return $this->hasMany(TenderClarification::class)->orderByDesc('submitted_or_received_at');
+    }
+
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(TenderAlert::class)->latest('id');
+    }
+
     public function assignedEmployee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'assigned_employee_id');

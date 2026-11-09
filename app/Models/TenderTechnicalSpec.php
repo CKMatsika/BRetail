@@ -27,3 +27,4 @@ class TenderTechnicalSpec extends TenantRecord
         return $this->belongsTo(TenderRequirement::class, 'tender_requirement_id');
     }
 }
+

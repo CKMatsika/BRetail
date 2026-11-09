@@ -104,6 +104,22 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderGa
     Route::get('/tenders/{tenderId}/gap-analysis/export', 'exportCsv')->whereNumber('tenderId');
 });
 
+Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderMilestoneController::class)->group(function () {
+    Route::get('/tenders/{tenderId}/milestones', 'index')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/milestones', 'store')->whereNumber('tenderId');
+    Route::patch('/tenders/milestones/{milestoneId}', 'update')->whereNumber('milestoneId');
+    Route::delete('/tenders/milestones/{milestoneId}', 'destroy')->whereNumber('milestoneId');
+    Route::post('/tenders/{tenderId}/milestones/generate-defaults', 'generateDefaults')->whereNumber('tenderId');
+
+    Route::post('/tenders/{tenderId}/clarifications', 'storeClarification')->whereNumber('tenderId');
+    Route::patch('/tenders/clarifications/{clarificationId}', 'updateClarification')->whereNumber('clarificationId');
+
+    Route::get('/tenders/alerts', 'getAlerts');
+    Route::post('/tenders/alerts/{alertId}/read', 'markAlertRead')->whereNumber('alertId');
+    Route::post('/tenders/alerts/read-all', 'markAllAlertsRead');
+    Route::post('/tenders/alerts/dispatch-now', 'dispatchAlerts');
+});
+
 Route::middleware(['auth','tenant'])->group(base_path('routes/international.php'));
 Route::middleware(['auth','tenant'])->group(base_path('routes/hr.php'));
 Route::get('/currencies', [\App\Http\Controllers\InternationalController::class,'page'])->middleware(['auth','tenant','module:currencies','module:accounting','module:inventory']);

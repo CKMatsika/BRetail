@@ -69,3 +69,11 @@ Artisan::command('platform:staff {email} {--revoke}', function (string $email) {
 
     return 0;
 })->purpose('Grant or revoke access to the BRetail platform administration console');
+
+Artisan::command('tenders:check-deadlines {--tenant=}', function () {
+    $tenantId = $this->option('tenant') ? (int) $this->option('tenant') : null;
+    $count = app(\App\Services\Tender\TenderDeadlineEngineService::class)->checkAndDispatchAlerts($tenantId);
+    $this->info("Tender milestone scan completed. {$count} deadline alert(s) dispatched.");
+
+    return 0;
+})->purpose('Scan tender milestones and generate reminders across configurable lead time thresholds');

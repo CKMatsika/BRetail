@@ -44,3 +44,4 @@ return new class extends Migration
         Schema::dropIfExists('tender_gap_analyses');
     }
 };
+

@@ -33,3 +33,4 @@ class TenderGapAnalysis extends TenantRecord
         return $this->belongsTo(User::class, 'override_by_user_id');
     }
 }
+
