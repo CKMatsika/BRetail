@@ -189,7 +189,7 @@ export default function TenderRegistry({
         site_visit_at: "",
         site_visit_location: "",
         internal_deadline: "",
-        submission_method: "electronic",
+        submission_method: "electronic_portal",
         submission_address: "",
         source_url: "",
         contact_person: "",
@@ -406,7 +406,7 @@ export default function TenderRegistry({
             site_visit_at: "",
             site_visit_location: "",
             internal_deadline: "",
-            submission_method: "electronic",
+            submission_method: "electronic_portal",
             submission_address: "",
             source_url: "",
             contact_person: "",
@@ -2256,9 +2256,8 @@ export default function TenderRegistry({
                                             onChange={(e) => setFormData({ ...formData, submission_method: e.target.value })}
                                             className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-emerald-500"
                                         >
-                                            <option value="electronic">Electronic / PRAZ eGP Portal</option>
-                                            <option value="physical">Physical Tender Box Submission</option>
-                                            <option value="both">Both Electronic & Physical Copies</option>
+                                            <option value="electronic_portal">Electronic / PRAZ eGP Portal</option>
+                                            <option value="physical_delivery">Physical Tender Box Submission</option>
                                             <option value="email">Direct Email Submission</option>
                                         </select>
                                     </div>

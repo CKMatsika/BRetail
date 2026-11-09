@@ -218,6 +218,14 @@ final class TenderService
     {
         $this->permit($u, 'tenders.manage');
 
+        if (isset($data['submission_method'])) {
+            $data['submission_method'] = match ($data['submission_method']) {
+                'electronic', 'eprocurement_portal' => 'electronic_portal',
+                'physical', 'both' => 'physical_delivery',
+                default => $data['submission_method'],
+            };
+        }
+
         return DB::transaction(function () use ($u, $data, $files) {
             $tender = new Tender([
                 'reference_number' => $data['reference_number'],
@@ -272,6 +280,14 @@ final class TenderService
     public function update(User $u, int $id, array $data): Tender
     {
         $this->permit($u, 'tenders.manage');
+
+        if (isset($data['submission_method'])) {
+            $data['submission_method'] = match ($data['submission_method']) {
+                'electronic', 'eprocurement_portal' => 'electronic_portal',
+                'physical', 'both' => 'physical_delivery',
+                default => $data['submission_method'],
+            };
+        }
 
         return DB::transaction(function () use ($u, $id, $data) {
             $tender = Tender::findOrFail($id);

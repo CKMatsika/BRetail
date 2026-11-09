@@ -72,8 +72,8 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderCo
     Route::get('/tenders/data', 'data');
     Route::get('/tenders/{id}', 'show')->whereNumber('id');
     Route::post('/tenders', 'store');
-    Route::patch('/tenders/{id}', 'update')->whereNumber('id');
-    Route::patch('/tenders/{id}/status', 'updateStatus')->whereNumber('id');
+    Route::match(['put', 'patch'], '/tenders/{id}', 'update')->whereNumber('id');
+    Route::match(['put', 'patch'], '/tenders/{id}/status', 'updateStatus')->whereNumber('id');
     Route::post('/tenders/{id}/documents', 'uploadDocument')->whereNumber('id');
     Route::get('/tenders/documents/{documentId}/download', 'downloadDocument')->whereNumber('documentId');
     Route::delete('/tenders/documents/{documentId}', 'deleteDocument')->whereNumber('documentId');

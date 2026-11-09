@@ -395,5 +395,54 @@ class TenderTest extends TestCase
         $this->assertTrue($pastTender->isClosed());
         $this->assertLessThan(0, $pastTender->daysRemaining());
     }
+
+    public function test_tender_submission_method_accepts_aliases_and_normalizes(): void
+    {
+        $closingDate = Carbon::now()->addDays(14)->toIso8601String();
+
+        // 1. Test alias 'electronic' -> normalizes to 'electronic_portal'
+        $resp = $this->actingAs($this->owner)->postJson('/tenders', [
+            'reference_number' => 'ALIAS-ELEC-01',
+            'title' => 'Supply with electronic alias',
+            'procuring_entity' => 'TelOne',
+            'procurement_category' => 'goods',
+            'closing_at' => $closingDate,
+            'submission_method' => 'electronic',
+        ]);
+        $resp->assertOk();
+        $this->assertSame('electronic_portal', $resp->json('tender.submission_method'));
+
+        // 2. Test alias 'physical' -> normalizes to 'physical_delivery'
+        $respPhysical = $this->actingAs($this->owner)->postJson('/tenders', [
+            'reference_number' => 'ALIAS-PHYS-02',
+            'title' => 'Supply with physical alias',
+            'procuring_entity' => 'Econet',
+            'procurement_category' => 'goods',
+            'closing_at' => $closingDate,
+            'submission_method' => 'physical',
+        ]);
+        $respPhysical->assertOk();
+        $this->assertSame('physical_delivery', $respPhysical->json('tender.submission_method'));
+
+        // 3. Test alias 'eprocurement_portal' -> normalizes to 'electronic_portal'
+        $respEproc = $this->actingAs($this->owner)->postJson('/tenders', [
+            'reference_number' => 'ALIAS-EPROC-03',
+            'title' => 'Supply with eprocurement alias',
+            'procuring_entity' => 'ZIMRA',
+            'procurement_category' => 'goods',
+            'closing_at' => $closingDate,
+            'submission_method' => 'eprocurement_portal',
+        ]);
+        $respEproc->assertOk();
+        $this->assertSame('electronic_portal', $respEproc->json('tender.submission_method'));
+
+        // 4. Test updating with alias 'electronic'
+        $tenderId = $respPhysical->json('tender.id');
+        $respUpdate = $this->actingAs($this->owner)->putJson('/tenders/'.$tenderId, [
+            'submission_method' => 'electronic',
+        ]);
+        $respUpdate->assertOk();
+        $this->assertSame('electronic_portal', $respUpdate->json('tender.submission_method'));
+    }
 }
 

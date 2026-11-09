@@ -48,7 +48,7 @@ class TenderController
             'site_visit_at' => 'nullable|date',
             'site_visit_location' => 'nullable|string|max:255',
             'internal_deadline' => 'nullable|date',
-            'submission_method' => 'nullable|string|in:electronic_portal,physical_delivery,email',
+            'submission_method' => 'nullable|string|in:electronic_portal,physical_delivery,email,electronic,physical,both,eprocurement_portal',
             'submission_address' => 'nullable|string|max:255',
             'source_url' => 'nullable|url|max:500',
             'contact_person' => 'nullable|string|max:120',
@@ -60,6 +60,14 @@ class TenderController
             'documents' => 'nullable|array',
             'documents.*' => 'file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,zip,jpg,jpeg,png,txt|max:30720',
         ]);
+
+        if (isset($validated['submission_method'])) {
+            $validated['submission_method'] = match ($validated['submission_method']) {
+                'electronic', 'eprocurement_portal' => 'electronic_portal',
+                'physical', 'both' => 'physical_delivery',
+                default => $validated['submission_method'],
+            };
+        }
 
         $files = $request->file('documents') ?? [];
         $tender = $service->store($request->user(), $validated, is_array($files) ? $files : [$files]);
@@ -96,7 +104,7 @@ class TenderController
             'site_visit_at' => 'nullable|date',
             'site_visit_location' => 'nullable|string|max:255',
             'internal_deadline' => 'nullable|date',
-            'submission_method' => 'nullable|string|in:electronic_portal,physical_delivery,email',
+            'submission_method' => 'nullable|string|in:electronic_portal,physical_delivery,email,electronic,physical,both,eprocurement_portal',
             'submission_address' => 'nullable|string|max:255',
             'source_url' => 'nullable|url|max:500',
             'contact_person' => 'nullable|string|max:120',
@@ -107,6 +115,14 @@ class TenderController
             'status_reason' => 'nullable|string|max:1000',
             'notes' => 'nullable|string|max:5000',
         ]);
+
+        if (isset($validated['submission_method'])) {
+            $validated['submission_method'] = match ($validated['submission_method']) {
+                'electronic', 'eprocurement_portal' => 'electronic_portal',
+                'physical', 'both' => 'physical_delivery',
+                default => $validated['submission_method'],
+            };
+        }
 
         $tender = $service->update($request->user(), (int) $id, $validated);
 
