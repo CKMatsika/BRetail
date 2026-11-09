@@ -309,5 +309,30 @@ class TenderTechnicalSpecTest extends TestCase
             ->deleteJson("/tenders/technical-specs/{$spec->id}");
         $resDel->assertNotFound();
     }
+
+    public function test_bulk_import_technical_clauses_from_pasted_text(): void
+    {
+        $rawText = <<<TXT
+1. Koha ILS Software Deployment on Linux Ubuntu 24.04 LTS
+2. MariaDB 10.11 Enterprise Database with automated schema indexing
+3. Mobile Responsive Web OPAC Portal with patron reservations
+4. Staff Circulation and Borrower Management Modules
+5. MARC21 and Z39.50 copy-cataloguing interoperability
+TXT;
+
+        $res = $this->actingAs($this->owner)
+            ->postJson("/tenders/{$this->tender->id}/technical-specs/bulk-import", [
+                'raw_text' => $rawText,
+            ]);
+
+        $res->assertOk()
+            ->assertJsonPath('success', true);
+
+        $specs = $res->json('data.specs');
+        $this->assertCount(5, $specs);
+        $this->assertSame('TS-01', $specs[0]['item_number']);
+        $this->assertStringContainsString('Koha ILS Software Deployment', $specs[0]['title']);
+        $this->assertSame('comply', $specs[0]['compliance_status']);
+    }
 }
 

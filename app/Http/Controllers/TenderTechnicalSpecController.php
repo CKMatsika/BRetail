@@ -98,5 +98,20 @@ class TenderTechnicalSpecController
     {
         return $this->specService->exportCsv($r->user(), $tenderId);
     }
+
+    public function bulkImport(Request $r, int $tenderId): JsonResponse
+    {
+        $validated = $r->validate([
+            'raw_text' => 'required|string|min:3|max:50000',
+        ]);
+
+        $data = $this->specService->bulkImport($r->user(), $tenderId, $validated['raw_text']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Technical specifications imported successfully.',
+            'data' => $data,
+        ]);
+    }
 }
 

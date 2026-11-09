@@ -90,6 +90,7 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderAn
 Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderTechnicalSpecController::class)->group(function () {
     Route::get('/tenders/{tenderId}/technical-specs', 'index')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/technical-specs/generate', 'generate')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/technical-specs/bulk-import', 'bulkImport')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/technical-specs', 'store')->whereNumber('tenderId');
     Route::patch('/tenders/technical-specs/{specId}', 'update')->whereNumber('specId');
     Route::delete('/tenders/technical-specs/{specId}', 'destroy')->whereNumber('specId');

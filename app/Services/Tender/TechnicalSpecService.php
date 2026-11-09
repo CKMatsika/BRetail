@@ -96,7 +96,18 @@ final class TechnicalSpecService
         // Fetch technical requirements
         $techReqs = $tender->requirements->where('category', 'technical_specification')->values();
 
-        // If no technical requirements exist yet, seed baseline technical clauses from tender scope
+        // If no technical requirements exist yet, or only contains the legacy single catch-all, trigger automatic analysis
+        if ($techReqs->isEmpty() || ($techReqs->count() === 1 && str_starts_with($techReqs->first()->title, 'Technical Compliance to Scope'))) {
+            try {
+                app(\App\Services\Tender\TenderAnalysisService::class)->analyzeTender($u, $tenderId);
+                $tender->unsetRelation('requirements');
+                $techReqs = $tender->requirements()->where('category', 'technical_specification')->get();
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Auto-analysis during tech spec generation failed: '.$e->getMessage());
+            }
+        }
+
+        // If still empty, seed baseline technical clauses from tender scope
         if ($techReqs->isEmpty()) {
             $defaultClauses = [
                 [
@@ -316,6 +327,87 @@ final class TechnicalSpecService
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
+    }
+
+    /**
+     * Bulk imports technical clauses from raw pasted text (e.g. from an RFP PDF or table).
+     */
+    public function bulkImport(User $u, int $tenderId, string $rawText): array
+    {
+        $this->permit($u, 'tenders.manage');
+
+        $tender = Tender::findOrFail($tenderId);
+        $lines = preg_split('/\r\n|\r|\n/', trim($rawText));
+        $clauses = [];
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line) || strlen($line) < 3) {
+                continue;
+            }
+
+            // Split on tab, pipe, or colon if table row or key-value
+            if (str_contains($line, "\t")) {
+                $parts = explode("\t", $line);
+            } elseif (str_contains($line, '|')) {
+                $parts = array_map('trim', explode('|', trim($line, '|')));
+            } else {
+                $parts = [$line];
+            }
+
+            $title = trim($parts[0]);
+            $spec = isset($parts[1]) && trim($parts[1]) !== '' ? trim($parts[1]) : $title;
+
+            // Remove leading bullet/numbering
+            $cleanTitle = preg_replace('/^(?:TS-?\d+|[0-9]{1,2}[\.\)]|[a-z][\.\)]|[-•*])\s*/i', '', $title);
+
+            $clauses[] = [
+                'title' => Str::limit($cleanTitle ?: $title, 255),
+                'original' => $spec,
+                'explanation' => 'Mandatory technical schedule parameter.',
+                'purpose' => 'Verification of compliance against procurement specification.',
+                'evidence' => 'Manufacturer technical datasheet, brochure, and compliance schedule.',
+                'solution' => 'Offered solution fully complies with specified requirement.',
+                'mandatory' => true,
+            ];
+        }
+
+        if (empty($clauses)) {
+            abort(422, 'No valid technical specification clauses detected in pasted text.');
+        }
+
+        return DB::transaction(function () use ($u, $tender, $clauses) {
+            $startIndex = (int) (TenderTechnicalSpec::where('tender_id', $tender->id)->max('order_index') ?: 0) + 1;
+
+            foreach ($clauses as $clause) {
+                TenderTechnicalSpec::create([
+                    'tenant_id' => $tender->tenant_id,
+                    'tender_id' => $tender->id,
+                    'item_number' => sprintf('TS-%02d', $startIndex),
+                    'title' => $clause['title'],
+                    'original_specification' => $clause['original'],
+                    'plain_language_explanation' => $clause['explanation'],
+                    'purpose' => $clause['purpose'],
+                    'is_mandatory' => $clause['mandatory'],
+                    'required_evidence' => $clause['evidence'],
+                    'suggested_solution' => $clause['solution'],
+                    'alternative_solutions' => 'Permitted equivalent solutions subject to written entity approval.',
+                    'compliance_status' => 'comply',
+                    'bidder_offered_specification' => $clause['solution'],
+                    'deviation_statement' => null,
+                    'evidence_reference' => 'Technical Brochure & Annexure A',
+                    'human_verified' => true,
+                    'order_index' => $startIndex,
+                ]);
+                $startIndex++;
+            }
+
+            Audit::record('tender_technical_specs.bulk_imported', (string) $tender->id, [
+                'imported_count' => count($clauses),
+            ]);
+
+            return $this->list($u, $tender->id);
+        });
     }
 }
 

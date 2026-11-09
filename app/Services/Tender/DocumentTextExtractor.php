@@ -207,18 +207,24 @@ final class DocumentTextExtractor
 
     private function extractPdf(string $path): array
     {
-        // 1. Try pdftotext CLI if installed
-        $pdfToText = trim(@shell_exec('where pdftotext 2>nul') ?: '');
-        if ($pdfToText && file_exists($pdfToText)) {
-            $escaped = escapeshellarg($path);
-            $out = @shell_exec("{$escaped} -");
-            if ($out && strlen(trim($out)) > 10) {
-                return [
-                    'text' => trim($out),
-                    'pages' => [1 => trim($out)],
-                    'format' => 'pdf',
-                    'word_count' => str_word_count($out),
-                ];
+        // 1. Try pdftotext CLI if installed (Windows or Linux)
+        $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $checkCmd = $isWin ? 'where pdftotext 2>nul' : 'which pdftotext 2>/dev/null';
+        $pdfToText = trim(@shell_exec($checkCmd) ?: '');
+        if ($pdfToText) {
+            $bin = $isWin ? explode("\r\n", $pdfToText)[0] : $pdfToText;
+            if (file_exists($bin)) {
+                $escapedBin = escapeshellarg($bin);
+                $escaped = escapeshellarg($path);
+                $out = @shell_exec("{$escapedBin} {$escaped} -");
+                if ($out && strlen(trim($out)) > 10) {
+                    return [
+                        'text' => trim($out),
+                        'pages' => [1 => trim($out)],
+                        'format' => 'pdf',
+                        'word_count' => str_word_count($out),
+                    ];
+                }
             }
         }
 
