@@ -435,6 +435,27 @@ export default function Trade({
     } | null>(null);
     const [preview, setPreview] = useState<PreviewData | null>(null);
     const [shareDoc, setShareDoc] = useState<Doc | null>(null);
+    const [paynowLoading, setPaynowLoading] = useState<number | null>(null);
+
+    const handlePaynow = async (docId: number) => {
+        try {
+            setPaynowLoading(docId);
+            setNotice("Initiating Paynow payment session...");
+            const res = await axios.post(`/portal/document/${docId}/paynow`, {}, {
+                headers: { Accept: "application/json" }
+            });
+            if (res.data?.browser_url) {
+                window.open(res.data.browser_url, "_blank");
+                setNotice("Paynow checkout opened in a new tab. Complete payment on Paynow.");
+            } else {
+                setNotice("Unable to initiate Paynow checkout.");
+            }
+        } catch (err: any) {
+            setNotice(err.response?.data?.message || "Failed to initiate Paynow payment.");
+        } finally {
+            setPaynowLoading(null);
+        }
+    };
     const [items, setItems] = useState<Item[]>([
         {
             variant_id: initialVariant?.id ?? 0,
@@ -2162,6 +2183,17 @@ export default function Trade({
                                         >
                                             Email / WhatsApp
                                         </button>
+                                        {!q.quote_closed && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handlePaynow(q.id)}
+                                                disabled={paynowLoading === q.id}
+                                                style={{ color: "#008751", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "3px" }}
+                                                title="Accept & Pay with Paynow"
+                                            >
+                                                {paynowLoading === q.id ? "Opening..." : "⚡ Paynow"}
+                                            </button>
+                                        )}
                                         {can("sales.quote") &&
                                             !q.quote_closed && (
                                                 <button
@@ -2263,6 +2295,17 @@ export default function Trade({
                                             >
                                                 Email / WhatsApp
                                             </button>
+                                            {Number(i.outstanding) > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handlePaynow(i.id)}
+                                                    disabled={paynowLoading === i.id}
+                                                    style={{ color: "#008751", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "3px" }}
+                                                    title="Collect payment online with Paynow"
+                                                >
+                                                    {paynowLoading === i.id ? "Opening..." : "⚡ Paynow"}
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => {
                                                     setPreview(i);
@@ -2376,15 +2419,32 @@ export default function Trade({
                             currency={d.currency}
                             title="Invoice preview"
                         />
-                        <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                        <div style={{ display: "flex", gap: "10px", marginTop: "10px", flexWrap: "wrap" }}>
                             {"id" in preview && (
-                                <button
-                                    type="button"
-                                    onClick={() => setShareDoc(preview as Doc)}
-                                    style={{ background: "#2563eb", color: "#fff", fontWeight: 600 }}
-                                >
-                                    Email / WhatsApp Document
-                                </button>
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShareDoc(preview as Doc)}
+                                        style={{ background: "#2563eb", color: "#fff", fontWeight: 600 }}
+                                    >
+                                        Email / WhatsApp Document
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handlePaynow((preview as any).id)}
+                                        disabled={paynowLoading === (preview as any).id}
+                                        style={{
+                                            background: "#008751",
+                                            color: "#fff",
+                                            fontWeight: 600,
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                        }}
+                                    >
+                                        {paynowLoading === (preview as any).id ? "Opening..." : "⚡ Pay with Paynow"}
+                                    </button>
+                                </>
                             )}
                             <button onClick={() => setPreview(null)}>
                                 Close preview
@@ -2401,13 +2461,81 @@ export default function Trade({
                         "opening_receivable",
                     ].includes(selected.kind) &&
                     !selected.currency_snapshot && (
-                        <Form
-                            key={"settle" + selected.id}
-                            title={
-                                (area === "sales"
-                                    ? "Receive payment for "
-                                    : "Pay supplier invoice ") + selected.number
-                            }
+                        <>
+                            {area === "sales" && (
+                                <div
+                                    style={{
+                                        margin: "0 0 16px 0",
+                                        padding: "16px 20px",
+                                        background: "#f0fdf4",
+                                        border: "1px solid #86efac",
+                                        borderRadius: "8px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        flexWrap: "wrap",
+                                        gap: "12px",
+                                    }}
+                                >
+                                    <div>
+                                        <div
+                                            style={{
+                                                fontSize: "14px",
+                                                fontWeight: 700,
+                                                color: "#166534",
+                                            }}
+                                        >
+                                            ⚡ Instant Online Payment with Paynow
+                                        </div>
+                                        <div
+                                            style={{
+                                                fontSize: "12px",
+                                                color: "#15803d",
+                                                marginTop: "2px",
+                                            }}
+                                        >
+                                            Collect payment via EcoCash, OneMoney, InnBucks, Zimswitch, or Visa/Mastercard.
+                                        </div>
+                                        <div
+                                            style={{
+                                                fontSize: "12px",
+                                                color: "#334155",
+                                                marginTop: "4px",
+                                            }}
+                                        >
+                                            Outstanding: <strong>{d.currency} {selected.outstanding ?? "0"}</strong>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handlePaynow(selected.id)}
+                                        disabled={paynowLoading === selected.id}
+                                        style={{
+                                            background: "#008751",
+                                            color: "#ffffff",
+                                            border: "none",
+                                            borderRadius: "6px",
+                                            padding: "10px 20px",
+                                            fontSize: "13px",
+                                            fontWeight: 700,
+                                            cursor: "pointer",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                            boxShadow: "0 2px 6px rgba(0,135,81,0.25)",
+                                        }}
+                                    >
+                                        {paynowLoading === selected.id ? "Opening Paynow..." : "⚡ Launch Paynow Checkout →"}
+                                    </button>
+                                </div>
+                            )}
+                            <Form
+                                key={"settle" + selected.id}
+                                title={
+                                    (area === "sales"
+                                        ? "Manual cash/bank receipt for "
+                                        : "Pay supplier invoice ") + selected.number
+                                }
                             fields={[
                                 ...basic,
                                 {
@@ -2434,6 +2562,7 @@ export default function Trade({
                             }
                             button="Post payment"
                         />
+                        </>
                     )}
                 {["bills", "invoices"].includes(tab) &&
                     selected &&

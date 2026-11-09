@@ -396,6 +396,23 @@ export default function TradeShareModal({
                                         </a>
                                     </div>
 
+                                    {["invoice", "quote"].includes(documentKind.toLowerCase()) && (
+                                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-900">
+                                            <div>
+                                                <div className="font-semibold text-emerald-800">⚡ Paynow Online Payment Active</div>
+                                                <div className="text-[11px] text-emerald-700">Your customer can pay immediately via EcoCash, OneMoney, InnBucks, or Card.</div>
+                                            </div>
+                                            <a
+                                                href={`${shareInfo?.signed_url}#paynow`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center gap-1 font-semibold px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm shrink-0"
+                                            >
+                                                Open Paynow View <ExternalLink className="w-3.5 h-3.5" />
+                                            </a>
+                                        </div>
+                                    )}
+
                                     <div className="flex justify-end pt-3 border-t border-slate-100">
                                         <button
                                             type="button"

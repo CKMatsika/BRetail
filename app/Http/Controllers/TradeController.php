@@ -123,7 +123,28 @@ final class TradeController
         abort_unless($this->allowed($r, $purchase ? 'purchasing' : 'sales'), 403);
         AccountingAccess::branch($r->user(), Warehouse::findOrFail($doc->warehouse_id)->branch_id);
 
-        return view('trade.document', ['document' => $doc instanceof TradeDocument ? app(\App\Services\TradeDocuments::class)->present($doc) : $doc->toArray(), 'company' => Company::firstOrFail(), 'kind' => $kind === 'order' ? 'Purchase order' : str_replace('_', ' ', $doc->kind)]);
+        $outstanding = '0.00';
+        $isPaid = false;
+        $canPayOnline = false;
+
+        if ($doc instanceof TradeDocument) {
+            $ledger = app(\App\Services\TradeLedger::class);
+            $outstanding = in_array($doc->kind, ['invoice', 'opening_receivable'], true)
+                ? (string) \Brick\Math\BigDecimal::of($ledger->outstanding($doc))
+                : (string) \Brick\Math\BigDecimal::of($doc->total);
+
+            $isPaid = in_array($doc->kind, ['invoice', 'opening_receivable'], true) && \Brick\Math\BigDecimal::of($outstanding)->isLessThanOrEqualTo(0);
+            $canPayOnline = ! $isPaid && in_array($doc->kind, ['invoice', 'quote'], true) && \Brick\Math\BigDecimal::of($outstanding)->isPositive();
+        }
+
+        return view('trade.document', [
+            'document' => $doc instanceof TradeDocument ? app(\App\Services\TradeDocuments::class)->present($doc) : $doc->toArray(),
+            'company' => Company::firstOrFail(),
+            'kind' => $kind === 'order' ? 'Purchase order' : str_replace('_', ' ', $doc->kind),
+            'outstanding' => $outstanding,
+            'is_paid' => $isPaid,
+            'can_pay_online' => $canPayOnline,
+        ]);
     }
 
     public function publicDocument(Request $r, string $id)
