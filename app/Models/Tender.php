@@ -49,6 +49,11 @@ class Tender extends TenantRecord
         return $this->hasOne(TenderAnalysis::class)->latestOfMany();
     }
 
+    public function technicalSpecs(): HasMany
+    {
+        return $this->hasMany(TenderTechnicalSpec::class)->orderBy('order_index')->orderBy('id');
+    }
+
     public function assignedEmployee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'assigned_employee_id');

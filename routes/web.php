@@ -87,6 +87,15 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderAn
     Route::delete('/tenders/requirements/{requirementId}', 'deleteRequirement')->whereNumber('requirementId');
 });
 
+Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderTechnicalSpecController::class)->group(function () {
+    Route::get('/tenders/{tenderId}/technical-specs', 'index')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/technical-specs/generate', 'generate')->whereNumber('tenderId');
+    Route::post('/tenders/{tenderId}/technical-specs', 'store')->whereNumber('tenderId');
+    Route::patch('/tenders/technical-specs/{specId}', 'update')->whereNumber('specId');
+    Route::delete('/tenders/technical-specs/{specId}', 'destroy')->whereNumber('specId');
+    Route::get('/tenders/{tenderId}/technical-specs/export', 'export')->whereNumber('tenderId');
+});
+
 Route::middleware(['auth','tenant'])->group(base_path('routes/international.php'));
 Route::middleware(['auth','tenant'])->group(base_path('routes/hr.php'));
 Route::get('/currencies', [\App\Http\Controllers\InternationalController::class,'page'])->middleware(['auth','tenant','module:currencies','module:accounting','module:inventory']);

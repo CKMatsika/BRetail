@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import ComplianceCenter, { ComplianceData } from "./ComplianceCenter";
 import TenderAnalysisModal from "./TenderAnalysisModal";
+import TechnicalComplianceMatrix from "./TechnicalComplianceMatrix";
 
 export type TenderSummary = {
     total_tenders: number;
@@ -122,7 +123,7 @@ export default function TenderRegistry({
     canManage,
     canManageCompliance,
 }: Props) {
-    const [subTab, setSubTab] = useState<"opportunities" | "compliance" | "ai_analysis">("opportunities");
+    const [subTab, setSubTab] = useState<"opportunities" | "compliance" | "ai_analysis" | "tech_specs">("opportunities");
     const [data, setData] = useState<TenderData | null>(initialData ?? null);
     const [loading, setLoading] = useState(!initialData);
     const [search, setSearch] = useState("");
@@ -139,6 +140,7 @@ export default function TenderRegistry({
     const [statusReason, setStatusReason] = useState("");
     const [uploadDocModalTender, setUploadDocModalTender] = useState<TenderItem | null>(null);
     const [analysisModalTender, setAnalysisModalTender] = useState<TenderItem | null>(null);
+    const [technicalMatrixTender, setTechnicalMatrixTender] = useState<TenderItem | null>(null);
 
     // Form feedback
     const [submitting, setSubmitting] = useState(false);
@@ -590,8 +592,20 @@ export default function TenderRegistry({
                     >
                         <Sparkles className="w-4 h-4 text-amber-400" />
                         AI Tender Document Assistant
-                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            Phase 3
+                    </button>
+
+                    <button
+                        onClick={() => setSubTab("tech_specs")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                            subTab === "tech_specs"
+                                ? "bg-blue-600 text-white shadow-sm"
+                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                        }`}
+                    >
+                        <Layers className="w-4 h-4 text-sky-400" />
+                        Technical Specifications Matrix
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                            Phase 4
                         </span>
                     </button>
                 </div>
@@ -683,7 +697,70 @@ export default function TenderRegistry({
                 </div>
             )}
 
-            {/* Sub-Tab 3: Tender Opportunities (Primary Phase 2 View) */}
+            {/* Sub-Tab 3: Technical Specifications Matrix (Phase 4 View) */}
+            {subTab === "tech_specs" && (
+                <div className="space-y-6">
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 sm:p-8 shadow-sm">
+                        <div className="max-w-3xl mx-auto text-center space-y-3">
+                            <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center mx-auto shadow-inner">
+                                <Layers className="w-7 h-7 text-blue-600" />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-900">
+                                Clause-by-Clause Technical Specification Matrix
+                            </h2>
+                            <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">
+                                Formulate compliant technical proposals, compare specifications against offered solutions, record required evidence,
+                                and document justified deviations in accordance with standard Zimbabwean public procurement requirements.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                <Layers className="w-4 h-4 text-blue-600" />
+                                Select a Tender to View Technical Compliance Schedule ({data.tenders.length})
+                            </h3>
+                        </div>
+
+                        {data.tenders.length === 0 ? (
+                            <p className="text-xs text-slate-500 py-6 text-center">
+                                No tender opportunities registered yet. Add a tender from the Register tab first.
+                            </p>
+                        ) : (
+                            <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                                {data.tenders.map((t) => (
+                                    <div key={t.id} className="p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                    {t.reference_number}
+                                                </span>
+                                                {renderStatusBadge(t.status)}
+                                                {renderCountdownBadge(t)}
+                                            </div>
+                                            <h4 className="text-sm font-bold text-slate-900">{t.title}</h4>
+                                            <p className="text-xs text-slate-500">
+                                                Entity: <strong className="text-slate-700">{t.procuring_entity}</strong> ({t.entity_type}) · Category: <span className="capitalize">{t.procurement_category}</span>
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setTechnicalMatrixTender(t)}
+                                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 shadow-sm transition-all"
+                                            >
+                                                <Layers className="w-3.5 h-3.5" />
+                                                Open Technical Matrix
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
             {subTab === "opportunities" && (
                 <>
                     {/* Feedback Alerts */}
@@ -934,6 +1011,15 @@ export default function TenderRegistry({
                                                 AI Analysis
                                             </button>
 
+                                            <button
+                                                onClick={() => setTechnicalMatrixTender(tender)}
+                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+                                                title="Technical Specification Compliance Matrix"
+                                            >
+                                                <Layers className="w-3.5 h-3.5 text-blue-600" />
+                                                Tech Specs
+                                            </button>
+
                                             {canManage && (
                                                 <button
                                                     onClick={() => {
@@ -1055,6 +1141,12 @@ export default function TenderRegistry({
                                     className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-indigo-600 text-white rounded hover:bg-indigo-700 shadow-sm"
                                 >
                                     <Sparkles className="w-3.5 h-3.5" /> AI Analysis Matrix
+                                </button>
+                                <button
+                                    onClick={() => setTechnicalMatrixTender(selectedTender)}
+                                    className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm"
+                                >
+                                    <Layers className="w-3.5 h-3.5" /> Technical Matrix
                                 </button>
                                 {canManage && (
                                     <button
@@ -1925,6 +2017,17 @@ export default function TenderRegistry({
                     tenderRef={analysisModalTender.reference_number}
                     canManage={canManage}
                     onClose={() => setAnalysisModalTender(null)}
+                />
+            )}
+
+            {/* TECHNICAL COMPLIANCE MATRIX MODAL / DRAWER */}
+            {technicalMatrixTender && (
+                <TechnicalComplianceMatrix
+                    tenderId={technicalMatrixTender.id}
+                    tenderTitle={technicalMatrixTender.title}
+                    tenderRef={technicalMatrixTender.reference_number}
+                    canManage={canManage}
+                    onClose={() => setTechnicalMatrixTender(null)}
                 />
             )}
         </div>
