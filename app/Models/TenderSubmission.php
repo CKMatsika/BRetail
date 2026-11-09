@@ -43,3 +43,4 @@ class TenderSubmission extends TenantRecord
         return $this->belongsTo(User::class, 'submitted_by_id');
     }
 }
+

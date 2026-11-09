@@ -143,47 +143,47 @@ export default function TenderReportsDashboard({
         <div className="space-y-6">
             {/* EXECUTIVE KPI HEADER */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Overall Win Rate</div>
-                    <div className="text-2xl font-black text-emerald-600 mt-1 flex items-center gap-1">
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Overall Win Rate</div>
+                    <div className="text-2xl font-bold font-mono text-emerald-700 mt-1 flex items-center gap-1.5">
                         {metrics?.win_rate_percent}%
-                        <TrendingUp className="w-5 h-5 text-emerald-500" />
+                        <TrendingUp className="w-5 h-5 text-emerald-600" />
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">
+                    <div className="text-[11px] text-slate-500 mt-1">
                         {metrics?.awarded} won &bull; {metrics?.unsuccessful} lost
                     </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Awarded Contract Value</div>
-                    <div className="text-xl font-bold text-slate-900 mt-1 truncate">
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Awarded Contract Value</div>
+                    <div className="text-xl font-bold font-mono text-slate-900 mt-1 truncate">
                         {formatCur(metrics?.awarded_value)}
                     </div>
-                    <div className="text-xs text-emerald-600 mt-1 font-medium">Secured revenue</div>
+                    <div className="text-[11px] text-emerald-700 font-medium mt-1">Secured revenue</div>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Active Pipeline Value</div>
-                    <div className="text-xl font-bold text-indigo-700 mt-1 truncate">
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Pipeline Value</div>
+                    <div className="text-xl font-bold font-mono text-indigo-700 mt-1 truncate">
                         {formatCur(metrics?.pipeline_value)}
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">{metrics?.active_bidding} active tenders</div>
+                    <div className="text-[11px] text-slate-500 mt-1">{metrics?.active_bidding} active tenders</div>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Submitted Value</div>
-                    <div className="text-xl font-bold text-purple-700 mt-1 truncate">
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Submitted Value</div>
+                    <div className="text-xl font-bold font-mono text-purple-700 mt-1 truncate">
                         {formatCur(metrics?.submitted_value)}
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">{metrics?.submitted} bids under evaluation</div>
+                    <div className="text-[11px] text-slate-500 mt-1">{metrics?.submitted} under evaluation</div>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Total Tenders Handled</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Tenders Logged</div>
+                    <div className="text-2xl font-bold font-mono text-slate-900 mt-1">
                         {metrics?.total_tenders}
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">In institutional repository</div>
+                    <div className="text-[11px] text-slate-400 mt-1">In institutional registry</div>
                 </div>
             </div>
 
@@ -487,3 +487,4 @@ export default function TenderReportsDashboard({
         </div>
     );
 }
+

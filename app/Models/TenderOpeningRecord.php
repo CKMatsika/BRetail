@@ -26,3 +26,4 @@ class TenderOpeningRecord extends TenantRecord
         return $this->belongsTo(Tender::class);
     }
 }
+

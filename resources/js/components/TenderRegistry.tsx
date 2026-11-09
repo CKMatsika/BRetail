@@ -34,6 +34,9 @@ import {
     Calculator,
     Send,
     BarChart3,
+    Sliders,
+    Check,
+    ChevronRight,
 } from "lucide-react";
 import ComplianceCenter, { ComplianceData } from "./ComplianceCenter";
 import TenderAnalysisModal from "./TenderAnalysisModal";
@@ -459,23 +462,23 @@ export default function TenderRegistry({
         }
         if (tender.days_remaining <= 2) {
             return (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-300 animate-pulse">
-                    <AlertTriangle className="w-3 h-3 text-red-600" />
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                    <Clock className="w-3 h-3 text-rose-600 animate-pulse" />
                     {tender.hours_remaining !== null ? `${tender.hours_remaining}h left` : "Urgent"}
                 </span>
             );
         }
         if (tender.days_remaining <= 7) {
             return (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-300">
-                    <Clock className="w-3 h-3 text-amber-700" />
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                    <Clock className="w-3 h-3 text-amber-600" />
                     {tender.days_remaining}d remaining
                 </span>
             );
         }
         return (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
-                <Clock className="w-3 h-3 text-emerald-600" />
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                <Clock className="w-3 h-3 text-slate-500" />
                 {tender.days_remaining}d left
             </span>
         );
@@ -485,49 +488,58 @@ export default function TenderRegistry({
         switch (status) {
             case "awarded":
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Awarded
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                        Awarded
                     </span>
                 );
             case "active_bidding":
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-900 border border-blue-300">
-                        <Briefcase className="w-3 h-3 text-blue-600" /> Active Bidding
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-sky-50 text-sky-800 border border-sky-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-sky-600"></span>
+                        Active Bidding
                     </span>
                 );
             case "submitted":
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-900 border border-purple-300">
-                        <FileCheck className="w-3 h-3 text-purple-600" /> Submitted
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-600"></span>
+                        Submitted
                     </span>
                 );
             case "under_evaluation":
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-900 border border-indigo-300">
-                        <Clock className="w-3 h-3 text-indigo-600" /> Under Evaluation
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
+                        Under Evaluation
                     </span>
                 );
             case "evaluating_go_no_go":
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-300">
-                        <HelpCircle className="w-3 h-3 text-amber-600" /> Go / No-Go
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                        Go / No-Go
                     </span>
                 );
             case "lost":
+            case "unsuccessful":
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
-                        <XCircle className="w-3 h-3 text-slate-500" /> Not Awarded
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                        Unsuccessful
                     </span>
                 );
             case "cancelled":
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300">
-                        <X className="w-3 h-3 text-red-500" /> Cancelled
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-rose-50 text-rose-800 border border-rose-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                        Cancelled
                     </span>
                 );
             default:
                 return (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
                         Draft
                     </span>
                 );
@@ -567,157 +579,101 @@ export default function TenderRegistry({
 
     return (
         <div className="space-y-6">
-            {/* Top Navigation Sub-Tabs */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
-                <div className="flex items-center gap-2">
+            {/* Enterprise Top Navigation Bar */}
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs">
+                <div className="flex flex-wrap items-center gap-1.5">
                     <button
                         onClick={() => setSubTab("opportunities")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
                             subTab === "opportunities"
-                                ? "bg-emerald-600 text-white shadow-sm"
-                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                ? "bg-slate-900 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                         }`}
                     >
-                        <Briefcase className="w-4 h-4" />
-                        Tender Opportunities & Register
-                        <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-white/20 font-bold">
+                        <Briefcase className="w-3.5 h-3.5" />
+                        <span>Tender Register</span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                            subTab === "opportunities" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
+                        }`}>
                             {summary.total_tenders}
                         </span>
                     </button>
 
                     <button
                         onClick={() => setSubTab("compliance")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
                             subTab === "compliance"
-                                ? "bg-emerald-600 text-white shadow-sm"
-                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                ? "bg-slate-900 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                         }`}
                     >
-                        <ShieldAlert className="w-4 h-4" />
-                        Company Compliance Vault (PRAZ / ZIMRA / NSSA)
-                    </button>
-
-                    <button
-                        onClick={() => setSubTab("ai_analysis")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                            subTab === "ai_analysis"
-                                ? "bg-indigo-600 text-white shadow-sm"
-                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                        }`}
-                    >
-                        <Sparkles className="w-4 h-4 text-amber-400" />
-                        AI Tender Document Assistant
-                    </button>
-
-                    <button
-                        onClick={() => setSubTab("tech_specs")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                            subTab === "tech_specs"
-                                ? "bg-blue-600 text-white shadow-sm"
-                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                        }`}
-                    >
-                        <Layers className="w-4 h-4 text-sky-400" />
-                        Technical Specs Matrix
-                    </button>
-
-                    <button
-                        onClick={() => setSubTab("gap_analysis")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                            subTab === "gap_analysis"
-                                ? "bg-amber-600 text-white shadow-sm"
-                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                        }`}
-                    >
-                        <ShieldCheck className="w-4 h-4 text-amber-200" />
-                        Compliance & Gap Analysis
-                    </button>
-
-                    <button
-                        onClick={() => setSubTab("milestones")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                            subTab === "milestones"
-                                ? "bg-blue-600 text-white shadow-sm"
-                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                        }`}
-                    >
-                        <Clock className="w-4 h-4 text-sky-300" />
-                        Deadlines & Milestones
-                    </button>
-
-                    <button
-                        onClick={() => setSubTab("bid_studio")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                            subTab === "bid_studio"
-                                ? "bg-purple-600 text-white shadow-sm"
-                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                        }`}
-                    >
-                        <Sparkles className="w-4 h-4 text-amber-300" />
-                        AI Bid Studio
-                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200">
-                            Phase 7
-                        </span>
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Compliance Vault</span>
                     </button>
 
                     <button
                         onClick={() => setSubTab("pricing")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
                             subTab === "pricing"
-                                ? "bg-emerald-700 text-white shadow-sm"
-                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                ? "bg-slate-900 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                         }`}
                     >
-                        <Calculator className="w-4 h-4 text-emerald-300" />
-                        Pricing & BOQ
-                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                            Phase 8
-                        </span>
+                        <Calculator className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Pricing & BOQ</span>
+                    </button>
+
+                    <button
+                        onClick={() => setSubTab("bid_studio")}
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+                            subTab === "bid_studio"
+                                ? "bg-slate-900 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                        }`}
+                    >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>AI Bid Studio</span>
                     </button>
 
                     <button
                         onClick={() => setSubTab("submissions")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
                             subTab === "submissions"
-                                ? "bg-slate-900 text-white shadow-sm"
-                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                ? "bg-slate-900 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                         }`}
                     >
-                        <Send className="w-4 h-4 text-emerald-400" />
-                        Approvals & Submission
-                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-300">
-                            Phase 9
-                        </span>
+                        <Send className="w-3.5 h-3.5 text-sky-400" />
+                        <span>Approvals & Submission</span>
                     </button>
 
                     <button
                         onClick={() => setSubTab("reports")}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
                             subTab === "reports"
-                                ? "bg-indigo-700 text-white shadow-sm"
-                                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                                ? "bg-slate-900 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                         }`}
                     >
-                        <BarChart3 className="w-4 h-4 text-indigo-300" />
-                        Reports & Win/Loss
-                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200">
-                            Phase 10
-                        </span>
+                        <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Executive Analytics</span>
                     </button>
                 </div>
 
-                {subTab === "opportunities" && canManage && (
-                    <button
-                        onClick={() => {
-                            resetCreateForm();
-                            setCreateModalOpen(true);
-                        }}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 shadow-sm transition-all"
-                    >
-                        <Plus className="w-4 h-4" />
-                        New Tender Opportunity
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    {canManage && (
+                        <button
+                            onClick={() => {
+                                resetCreateForm();
+                                setCreateModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition"
+                        >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>New Opportunity</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Sub-Tab 1: Compliance Vault */}
@@ -1219,68 +1175,68 @@ export default function TenderRegistry({
 
                     {/* Executive KPI Summary Cards */}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                        <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-sm">
-                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+                        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-all">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                                 Pipeline Value
                             </span>
-                            <div className="text-lg font-bold text-slate-900 mt-1 truncate">
+                            <div className="text-xl font-bold font-mono text-slate-900 mt-1 truncate">
                                 ${summary.pipeline_value}
                             </div>
-                            <span className="text-[11px] text-slate-500 block mt-0.5">Active bids total</span>
+                            <span className="text-[11px] text-slate-500 block mt-1">Active bids in pipeline</span>
                         </div>
 
-                        <div className="bg-blue-50/70 p-3.5 rounded-xl border border-blue-200 shadow-sm">
-                            <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider block">
+                        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-all">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                                 Active Bidding
                             </span>
                             <div className="flex items-center gap-1.5 mt-1">
-                                <Briefcase className="w-5 h-5 text-blue-600" />
-                                <span className="text-2xl font-bold text-blue-900">{summary.active_bidding}</span>
+                                <span className="text-2xl font-bold font-mono text-sky-800">{summary.active_bidding}</span>
                             </div>
-                            <span className="text-[11px] text-blue-700 block mt-0.5">Under preparation</span>
+                            <span className="text-[11px] text-sky-700 block mt-1 font-medium">Under preparation</span>
                         </div>
 
-                        <div className="bg-amber-50/80 p-3.5 rounded-xl border border-amber-200 shadow-sm">
-                            <span className="text-xs font-semibold text-amber-800 uppercase tracking-wider block">
+                        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-all">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                                 Closing &lt; 7 Days
                             </span>
                             <div className="flex items-center gap-1.5 mt-1">
-                                <Clock className="w-5 h-5 text-amber-600" />
-                                <span className="text-2xl font-bold text-amber-900">{summary.closing_soon}</span>
+                                <span className={`text-2xl font-bold font-mono ${
+                                    summary.closing_soon > 0 ? "text-amber-700" : "text-slate-800"
+                                }`}>
+                                    {summary.closing_soon}
+                                </span>
                             </div>
-                            <span className="text-[11px] text-amber-700 block mt-0.5">Immediate priority</span>
+                            <span className="text-[11px] text-amber-700 block mt-1 font-medium">Immediate priority</span>
                         </div>
 
-                        <div className="bg-purple-50/70 p-3.5 rounded-xl border border-purple-200 shadow-sm">
-                            <span className="text-xs font-semibold text-purple-700 uppercase tracking-wider block">
+                        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-all">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                                 Submitted Bids
                             </span>
                             <div className="flex items-center gap-1.5 mt-1">
-                                <FileCheck className="w-5 h-5 text-purple-600" />
-                                <span className="text-2xl font-bold text-purple-900">{summary.submitted}</span>
+                                <span className="text-2xl font-bold font-mono text-purple-800">{summary.submitted}</span>
                             </div>
-                            <span className="text-[11px] text-purple-700 block mt-0.5">Awaiting decision</span>
+                            <span className="text-[11px] text-purple-700 block mt-1 font-medium">Awaiting evaluation</span>
                         </div>
 
-                        <div className="bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-200 shadow-sm">
-                            <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider block">
+                        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-all">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                                 Awarded Wins
                             </span>
                             <div className="flex items-center gap-1.5 mt-1">
-                                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                                <span className="text-2xl font-bold text-emerald-900">{summary.awarded}</span>
+                                <span className="text-2xl font-bold font-mono text-emerald-700">{summary.awarded}</span>
                             </div>
-                            <span className="text-[11px] text-emerald-700 block mt-0.5">Successful contracts</span>
+                            <span className="text-[11px] text-emerald-700 block mt-1 font-medium">Secured contracts</span>
                         </div>
 
-                        <div className="bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-200 shadow-sm">
-                            <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider block">
-                                Won Value
+                        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-all">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                Secured Revenue
                             </span>
-                            <div className="text-lg font-bold text-emerald-900 mt-1 truncate">
+                            <div className="text-xl font-bold font-mono text-emerald-700 mt-1 truncate">
                                 ${summary.awarded_value}
                             </div>
-                            <span className="text-[11px] text-emerald-700 block mt-0.5">Contracted revenue</span>
+                            <span className="text-[11px] text-slate-500 block mt-1">Total won value</span>
                         </div>
                     </div>
 
@@ -1381,121 +1337,196 @@ export default function TenderRegistry({
                             filteredTenders.map((tender) => (
                                 <div
                                     key={tender.id}
-                                    className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm hover:border-emerald-300 transition-all space-y-4"
+                                    className="bg-white rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all overflow-hidden"
                                 >
-                                    <div className="flex flex-wrap items-start justify-between gap-3">
-                                        <div className="space-y-1 max-w-3xl">
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                                    {tender.reference_number}
-                                                </span>
-                                                {renderStatusBadge(tender.status)}
-                                                {renderCountdownBadge(tender)}
-                                                {tender.site_visit_required && (
-                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                                                        <MapPin className="w-3 h-3 text-amber-600" /> Site Visit Req.
+                                    {/* Card Header & Metadata */}
+                                    <div className="p-5 pb-4">
+                                        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+                                            <div className="space-y-1.5 flex-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200/80 tracking-wide">
+                                                        {tender.reference_number}
                                                     </span>
-                                                )}
-                                                {tender.bid_security_required && (
-                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
-                                                        <DollarSign className="w-3 h-3 text-blue-600" /> Bid Bond Req.
+                                                    {renderStatusBadge(tender.status)}
+                                                    {renderCountdownBadge(tender)}
+                                                    <span className="text-[11px] font-semibold text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 capitalize">
+                                                        {tender.entity_type.replace(/_/g, " ")}
                                                     </span>
-                                                )}
-                                            </div>
-                                            <h3 className="text-base font-bold text-slate-900 hover:text-emerald-700 cursor-pointer"
-                                                onClick={() => openTenderDetail(tender.id)}>
-                                                {tender.title}
-                                            </h3>
-                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-0.5">
-                                                <span className="flex items-center gap-1 font-medium text-slate-700">
-                                                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                                                    {tender.procuring_entity}
-                                                    <span className="text-[10px] text-slate-400 capitalize">
-                                                        ({tender.entity_type.replace(/_/g, " ")})
-                                                    </span>
-                                                </span>
-                                                <span>·</span>
-                                                <span>
-                                                    Category: <strong className="text-slate-700 capitalize">{tender.procurement_category.replace(/_/g, " ")}</strong>
-                                                </span>
-                                                <span>·</span>
-                                                <span>
-                                                    Method: <span className="text-slate-700 capitalize">{tender.procurement_method.replace(/_/g, " ")}</span>
-                                                </span>
-                                                {tender.assigned_employee && (
-                                                    <>
-                                                        <span>·</span>
-                                                        <span className="flex items-center gap-1 text-slate-600">
-                                                            <Users className="w-3 h-3 text-slate-400" />
-                                                            Lead: {tender.assigned_employee.name}
+                                                    {tender.site_visit_required && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                                            <MapPin className="w-3 h-3 text-amber-600" /> Site Visit Req.
                                                         </span>
-                                                    </>
+                                                    )}
+                                                    {tender.bid_security_required && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                                                            <DollarSign className="w-3 h-3 text-blue-600" /> Bid Bond Req.
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <h3
+                                                    className="text-base font-bold text-slate-900 hover:text-emerald-700 cursor-pointer transition-colors leading-snug"
+                                                    onClick={() => openTenderDetail(tender.id)}
+                                                >
+                                                    {tender.title}
+                                                </h3>
+
+                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 pt-0.5">
+                                                    <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                                                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                                                        {tender.procuring_entity}
+                                                    </span>
+                                                    <span className="text-slate-300">•</span>
+                                                    <span>
+                                                        Category: <strong className="text-slate-700 capitalize">{tender.procurement_category.replace(/_/g, " ")}</strong>
+                                                    </span>
+                                                    <span className="text-slate-300">•</span>
+                                                    <span>
+                                                        Method: <span className="text-slate-700 capitalize">{tender.procurement_method.replace(/_/g, " ")}</span>
+                                                    </span>
+                                                    {tender.assigned_employee && (
+                                                        <>
+                                                            <span className="text-slate-300">•</span>
+                                                            <span className="text-slate-600 flex items-center gap-1">
+                                                                <Users className="w-3 h-3 text-slate-400" />
+                                                                Lead: <strong className="text-slate-800">{tender.assigned_employee.name}</strong>
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Commercial Highlights Strip */}
+                                            <div className="flex lg:flex-col items-end justify-between lg:justify-start gap-1 shrink-0 pt-1 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                                                <div className="text-right">
+                                                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Estimated Value</div>
+                                                    <div className="text-base font-bold font-mono text-slate-900">
+                                                        {tender.currency} {Number(tender.estimated_value || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                                    </div>
+                                                </div>
+                                                {tender.bid_security_required && (
+                                                    <div className="text-[11px] font-medium text-slate-600 flex items-center gap-1">
+                                                        <ShieldAlert className="w-3 h-3 text-amber-600" />
+                                                        Bond: {tender.currency} {Number(tender.bid_security_amount || 0).toLocaleString()}
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-2">
+                                        {/* PRAZ Codes pill row */}
+                                        {tender.praz_categories && tender.praz_categories.length > 0 && (
+                                            <div className="mt-3 flex flex-wrap items-center gap-1.5 pt-2.5 border-t border-slate-100">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">PRAZ Codes:</span>
+                                                {tender.praz_categories.map((code) => (
+                                                    <span
+                                                        key={code}
+                                                        className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-50 text-slate-700 border border-slate-200"
+                                                    >
+                                                        {code}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Bid Lifecycle Progress Stepper */}
+                                    <div className="bg-slate-50/75 px-5 py-2.5 border-t border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                                        <div className="flex items-center gap-3 overflow-x-auto py-0.5">
                                             <button
                                                 onClick={() => setAnalysisModalTender(tender)}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 transition-colors"
-                                                title="AI Tender Document Analysis & Matrix"
+                                                className="hover:text-indigo-700 flex items-center gap-1 transition"
+                                                title="Open AI Analysis & Requirement Ingestion"
                                             >
-                                                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                                                AI Analysis
+                                                <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[9px]">1</span>
+                                                <span>Ingestion & AI</span>
                                             </button>
-
+                                            <span className="text-slate-300">→</span>
                                             <button
                                                 onClick={() => setTechnicalMatrixTender(tender)}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
-                                                title="Technical Specification Compliance Matrix"
+                                                className="hover:text-blue-700 flex items-center gap-1 transition"
+                                                title="Open Technical Compliance Matrix"
                                             >
-                                                <Layers className="w-3.5 h-3.5 text-blue-600" />
-                                                Tech Specs
+                                                <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[9px]">2</span>
+                                                <span>Tech Specs</span>
                                             </button>
-
+                                            <span className="text-slate-300">→</span>
                                             <button
                                                 onClick={() => setGapAnalysisModalTender(tender)}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-200 transition-colors"
-                                                title="Tender Compliance Gap Analysis & Bid/No-Bid"
+                                                className="hover:text-amber-700 flex items-center gap-1 transition"
+                                                title="Open Compliance Gap Analysis"
                                             >
-                                                <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
-                                                Gap Analysis
+                                                <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[9px]">3</span>
+                                                <span>Gap Analysis</span>
                                             </button>
-
+                                            <span className="text-slate-300">→</span>
                                             <button
-                                                onClick={() => setMilestonesModalTender(tender)}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
-                                                title="Deadlines, Milestones & Clarifications"
+                                                onClick={() => setPricingStudioTender(tender)}
+                                                className="hover:text-emerald-700 flex items-center gap-1 transition"
+                                                title="Open Pricing & BOQ Estimator"
                                             >
-                                                <Clock className="w-3.5 h-3.5 text-blue-600" />
-                                                Milestones
+                                                <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[9px]">4</span>
+                                                <span>Pricing</span>
                                             </button>
+                                            <span className="text-slate-300">→</span>
+                                            <button
+                                                onClick={() => setSubmissionModalTender(tender)}
+                                                className="hover:text-slate-900 flex items-center gap-1 transition"
+                                                title="Open Approvals & Submission"
+                                            >
+                                                <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[9px]">5</span>
+                                                <span>Sign-Off & Submit</span>
+                                            </button>
+                                        </div>
 
+                                        <div className="text-[11px] text-slate-400 font-medium hidden sm:block">
+                                            Closing: {new Date(tender.closing_at).toLocaleDateString()}
+                                        </div>
+                                    </div>
+
+                                    {/* Primary & Quick Action Bar */}
+                                    <div className="px-5 py-3 bg-white flex flex-wrap items-center justify-between gap-3">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <button
                                                 onClick={() => setBidStudioTender(tender)}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
-                                                title="AI Bid Preparation Studio"
+                                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition"
                                             >
-                                                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                                                Bid Studio
+                                                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                                <span>Bid Studio</span>
                                             </button>
 
                                             <button
                                                 onClick={() => setPricingStudioTender(tender)}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-colors"
-                                                title="Tender Pricing & BOQ Studio"
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-semibold border border-slate-300 transition"
                                             >
                                                 <Calculator className="w-3.5 h-3.5 text-emerald-600" />
-                                                Pricing & BOQ
+                                                <span>Pricing & BOQ</span>
                                             </button>
 
                                             <button
                                                 onClick={() => setSubmissionModalTender(tender)}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-300 transition-colors"
-                                                title="Approvals & Submission Studio"
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-semibold border border-slate-300 transition"
                                             >
-                                                <Send className="w-3.5 h-3.5 text-slate-700" />
-                                                Submission
+                                                <Send className="w-3.5 h-3.5 text-sky-600" />
+                                                <span>Sign-Off & Submit</span>
+                                            </button>
+                                        </div>
+
+                                        {/* Secondary Actions & Detail */}
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setMilestonesModalTender(tender)}
+                                                className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                                                title="Deadlines, Milestones & Addenda"
+                                            >
+                                                <Clock className="w-4 h-4" />
+                                            </button>
+
+                                            <button
+                                                onClick={() => openTenderDetail(tender.id)}
+                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition"
+                                            >
+                                                <span>Dossier ({tender.documents_count})</span>
+                                                <ArrowRight className="w-3.5 h-3.5" />
                                             </button>
 
                                             {canManage && (
@@ -1505,60 +1536,12 @@ export default function TenderRegistry({
                                                         setNewStatus(tender.status);
                                                         setStatusReason(tender.status_reason || "");
                                                     }}
-                                                    className="px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                                                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+                                                    title="Change Status"
                                                 >
-                                                    Status
+                                                    <Sliders className="w-4 h-4" />
                                                 </button>
                                             )}
-
-                                            <button
-                                                onClick={() => openTenderDetail(tender.id)}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-colors"
-                                            >
-                                                Details & Documents ({tender.documents_count})
-                                                <ArrowRight className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Tender Details Strip */}
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100 text-xs">
-                                        <div>
-                                            <span className="text-slate-400 block text-[11px]">Estimated Value:</span>
-                                            <span className="font-semibold text-slate-800">
-                                                {formatCurrency(tender.estimated_value, tender.currency)}
-                                            </span>
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-400 block text-[11px]">Closing Deadline:</span>
-                                            <span className="font-medium text-slate-800">
-                                                {tender.closing_at
-                                                    ? new Date(tender.closing_at).toLocaleString()
-                                                    : "Unspecified"}
-                                            </span>
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-400 block text-[11px]">Submission Mode:</span>
-                                            <span className="font-medium text-slate-800 capitalize">
-                                                {tender.submission_method.replace(/_/g, " ")}
-                                            </span>
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-400 block text-[11px]">PRAZ Categories:</span>
-                                            <div className="flex flex-wrap gap-1 mt-0.5">
-                                                {tender.praz_categories.length > 0 ? (
-                                                    tender.praz_categories.map((c) => (
-                                                        <span
-                                                            key={c}
-                                                            className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200"
-                                                        >
-                                                            {c}
-                                                        </span>
-                                                    ))
-                                                ) : (
-                                                    <span className="text-slate-400 text-[11px]">General</span>
-                                                )}
-                                            </div>
                                         </div>
                                     </div>
                                 </div>

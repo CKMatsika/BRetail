@@ -26,3 +26,4 @@ class TenderPricingItem extends TenantRecord
         return $this->belongsTo(TenderPricingEstimate::class, 'tender_pricing_estimate_id');
     }
 }
+

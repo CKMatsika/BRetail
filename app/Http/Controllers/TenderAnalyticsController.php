@@ -162,3 +162,4 @@ class TenderAnalyticsController extends Controller
         }, 200, $headers);
     }
 }
+

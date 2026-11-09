@@ -50,3 +50,4 @@ class TenderPricingEstimate extends TenantRecord
         return $this->status === 'approved';
     }
 }
+

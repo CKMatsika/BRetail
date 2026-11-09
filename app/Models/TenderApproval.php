@@ -33,3 +33,4 @@ class TenderApproval extends TenantRecord
         return $this->belongsTo(User::class, 'approver_id');
     }
 }
+

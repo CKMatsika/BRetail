@@ -321,59 +321,66 @@ export default function ComplianceCenter({ initialData, canManage }: Props) {
                         </div>
                     </div>
 
-                    <div className="bg-emerald-50/60 p-3.5 rounded-lg border border-emerald-100">
-                        <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider block">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Valid Active
                         </span>
                         <div className="flex items-center gap-1.5 mt-1">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                            <span className="text-2xl font-bold text-emerald-900">{summary.valid_count}</span>
+                            <span className="text-2xl font-bold font-mono text-emerald-700">{summary.valid_count}</span>
                         </div>
-                        <span className="text-xs text-emerald-700 mt-1 block">Certified compliant</span>
+                        <span className="text-[11px] text-emerald-700 mt-1 block font-medium">Certified compliant</span>
                     </div>
 
-                    <div className="bg-amber-50/70 p-3.5 rounded-lg border border-amber-200">
-                        <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider block">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Expiring &lt;30d
                         </span>
                         <div className="flex items-center gap-1.5 mt-1">
-                            <AlertTriangle className="w-5 h-5 text-amber-600" />
-                            <span className="text-2xl font-bold text-amber-900">{summary.expiring_count}</span>
+                            <span className={`text-2xl font-bold font-mono ${
+                                summary.expiring_count > 0 ? "text-amber-700" : "text-slate-700"
+                            }`}>
+                                {summary.expiring_count}
+                            </span>
                         </div>
-                        <span className="text-xs text-amber-700 mt-1 block">Needs renewal</span>
+                        <span className="text-[11px] text-amber-700 mt-1 block font-medium">Needs renewal</span>
                     </div>
 
-                    <div className="bg-red-50/60 p-3.5 rounded-lg border border-red-100">
-                        <span className="text-xs font-semibold text-red-700 uppercase tracking-wider block">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Expired
                         </span>
                         <div className="flex items-center gap-1.5 mt-1">
-                            <XCircle className="w-5 h-5 text-red-600" />
-                            <span className="text-2xl font-bold text-red-900">{summary.expired_count}</span>
+                            <span className={`text-2xl font-bold font-mono ${
+                                summary.expired_count > 0 ? "text-rose-700" : "text-slate-700"
+                            }`}>
+                                {summary.expired_count}
+                            </span>
                         </div>
-                        <span className="text-xs text-red-700 mt-1 block">Disqualifies bids</span>
+                        <span className="text-[11px] text-rose-700 mt-1 block font-medium">Disqualifies bids</span>
                     </div>
 
-                    <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200/70">
-                        <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider block">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Missing Mandatory
                         </span>
                         <div className="flex items-center gap-1.5 mt-1">
-                            <FileText className="w-5 h-5 text-slate-400" />
-                            <span className="text-2xl font-bold text-slate-800">{summary.missing_count}</span>
+                            <span className={`text-2xl font-bold font-mono ${
+                                summary.missing_count > 0 ? "text-slate-900" : "text-slate-400"
+                            }`}>
+                                {summary.missing_count}
+                            </span>
                         </div>
-                        <span className="text-xs text-slate-500 mt-1 block">Required uploads</span>
+                        <span className="text-[11px] text-slate-500 mt-1 block">Required uploads</span>
                     </div>
 
-                    <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200/70">
-                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs hover:border-slate-300 transition-all">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                             Exempt / N/A
                         </span>
                         <div className="flex items-center gap-1.5 mt-1">
-                            <HelpCircle className="w-5 h-5 text-slate-400" />
-                            <span className="text-2xl font-bold text-slate-700">{summary.na_count}</span>
+                            <span className="text-2xl font-bold font-mono text-slate-600">{summary.na_count}</span>
                         </div>
-                        <span className="text-xs text-slate-500 mt-1 block">Turnover/sector exempt</span>
+                        <span className="text-[11px] text-slate-400 mt-1 block">Turnover/sector exempt</span>
                     </div>
                 </div>
 

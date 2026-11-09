@@ -337,122 +337,123 @@ export default function TenderPricingStudio({ tenderId, onClose }: TenderPricing
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-white rounded-2xl w-full max-w-7xl h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100">
                 {/* HEADER */}
-                <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 text-white flex items-center justify-between shrink-0">
-                    <div className="flex items-center space-x-4">
-                        <div className="p-3 bg-emerald-500/20 border border-emerald-400/30 rounded-xl text-emerald-400">
-                            <Calculator className="w-6 h-6" />
+                <div className="px-6 py-4 border-b border-slate-800 bg-slate-900 text-white flex items-center justify-between shrink-0">
+                    <div className="flex items-center space-x-3.5">
+                        <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
+                            <Calculator className="w-5 h-5" />
                         </div>
                         <div>
-                            <div className="flex items-center space-x-3">
-                                <h2 className="text-xl font-bold tracking-tight">Tender Pricing & BOQ Studio</h2>
-                                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                                    PPDPA Zimbabwe Compliant
-                                </span>
+                            <div className="flex items-center space-x-2.5">
+                                <span className="font-mono text-xs text-slate-400">Tenders</span>
+                                <span className="text-slate-600">/</span>
+                                <span className="font-mono text-xs text-emerald-400 font-bold">{tender?.reference_number}</span>
+                                <span className="text-slate-600">/</span>
+                                <h2 className="text-sm font-bold tracking-tight text-white">Commercial Pricing & BOQ Studio</h2>
                                 {estimate?.status === "approved" ? (
-                                    <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-400/30 flex items-center gap-1">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                                         <Lock className="w-3 h-3" /> Signed Off & Approved
                                     </span>
                                 ) : (
-                                    <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center gap-1">
-                                        <Unlock className="w-3 h-3" /> Draft Working Model
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                                        <Unlock className="w-3 h-3" /> Working Estimate
                                     </span>
                                 )}
                             </div>
-                            <p className="text-xs text-gray-300 mt-1">
-                                <span className="font-semibold text-white">{tender?.reference_number}</span> &bull; {tender?.title} &bull; <span className="text-emerald-300">{tender?.procuring_entity}</span>
+                            <p className="text-xs text-slate-300 mt-0.5">
+                                <span className="font-semibold text-white">{tender?.title}</span> &bull; <span className="text-slate-300">{tender?.procuring_entity}</span>
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-2.5">
                         <a
                             href={`/tenders/${tenderId}/pricing/export-csv`}
-                            className="flex items-center space-x-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm font-medium rounded-lg border border-gray-700 transition"
+                            className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition"
                             title="Download standard Bill of Quantities CSV"
                         >
-                            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
                             <span>Export BOQ CSV</span>
                         </a>
 
                         {estimate?.status !== "approved" && (
                             <button
                                 onClick={() => setSignOffModalOpen(true)}
-                                className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-md hover:shadow-lg transition"
+                                className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-xs transition"
                             >
-                                <ShieldCheck className="w-4 h-4" />
+                                <ShieldCheck className="w-3.5 h-3.5" />
                                 <span>Commercial Sign-Off</span>
                             </button>
                         )}
 
                         <button
                             onClick={onClose}
-                            className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition"
+                            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
                         >
-                            <X className="w-6 h-6" />
+                            <X className="w-5 h-5" />
                         </button>
                     </div>
                 </div>
 
                 {/* EXECUTIVE METRIC CARDS */}
-                <div className="bg-gray-50 border-b border-gray-200 px-6 py-4 grid grid-cols-2 md:grid-cols-6 gap-3 shrink-0">
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="text-xs text-gray-500 font-medium">Total Bid Price (Inc VAT)</div>
-                        <div className="text-lg font-bold text-gray-900 mt-1">
+                <div className="bg-slate-50/70 border-b border-slate-200/80 px-6 py-3.5 grid grid-cols-2 md:grid-cols-6 gap-3 shrink-0">
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Bid Price (Inc VAT)</div>
+                        <div className="text-base font-bold font-mono text-slate-900 mt-1">
                             {formatCur(summary?.total_bid_price)}
                         </div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">
+                        <div className="text-[11px] text-slate-500 mt-0.5">
                             Before VAT: {formatCur(summary?.bid_sum_before_vat)}
                         </div>
                     </div>
 
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="text-xs text-gray-500 font-medium">Direct Base Costs</div>
-                        <div className="text-lg font-bold text-indigo-700 mt-1">
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Direct Base Costs</div>
+                        <div className="text-base font-bold font-mono text-indigo-700 mt-1">
                             {formatCur(summary?.direct_cost_total)}
                         </div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">
+                        <div className="text-[11px] text-slate-500 mt-0.5">
                             Total Base: {formatCur(summary?.total_cost_base)}
                         </div>
                     </div>
 
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="text-xs text-gray-500 font-medium">Net Profit & Margin</div>
-                        <div className="text-lg font-bold text-emerald-600 mt-1 flex items-center gap-1">
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Net Profit & Margin</div>
+                        <div className="text-base font-bold font-mono text-emerald-700 mt-1 flex items-center gap-1">
                             {summary?.net_margin_percent}%
-                            <ArrowUpRight className="w-4 h-4 text-emerald-500" />
+                            <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
                         </div>
                         <div className="text-[11px] text-emerald-700 font-medium mt-0.5">
                             Profit: {formatCur(summary?.net_profit)}
                         </div>
                     </div>
 
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="text-xs text-gray-500 font-medium">Break-Even Floor Price</div>
-                        <div className="text-lg font-bold text-amber-700 mt-1">
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Break-Even Floor Price</div>
+                        <div className="text-base font-bold font-mono text-amber-800 mt-1">
                             {formatCur(summary?.break_even_floor_price)}
                         </div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">Absolute lowest bid floor</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">Zero profit bid floor</div>
                     </div>
 
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="text-xs text-gray-500 font-medium">Statutory Costs & VAT</div>
-                        <div className="text-lg font-bold text-purple-700 mt-1">
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Statutory & VAT</div>
+                        <div className="text-base font-bold font-mono text-purple-700 mt-1">
                             {formatCur((summary?.praz_levy_amount || 0) + (summary?.fixed_statutory_costs || 0) + (summary?.vat_amount || 0))}
                         </div>
-                        <div className="text-[11px] text-gray-500 mt-0.5">
-                            PRAZ 1%: {formatCur(summary?.praz_levy_amount)} &bull; VAT: {formatCur(summary?.vat_amount)}
+                        <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                            PRAZ 1%: {formatCur(summary?.praz_levy_amount)}
                         </div>
                     </div>
 
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="text-xs text-gray-500 font-medium">Budget Competitiveness</div>
+                    <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Budget Competitiveness</div>
                         <div className="mt-1">
                             {getCompetitivenessBadge(summary?.budget_comparison?.competitiveness_status || "none")}
                         </div>
-                        <div className="text-[11px] text-gray-500 mt-1 truncate">
+                        <div className="text-[11px] text-slate-500 mt-1 truncate">
                             {summary?.budget_comparison?.estimated_budget
                                 ? `Budget: ${formatCur(summary?.budget_comparison?.estimated_budget)}`
-                                : "No budget ceiling"}
+                                : "No ceiling set"}
                         </div>
                     </div>
                 </div>
@@ -1261,3 +1262,4 @@ export default function TenderPricingStudio({ tenderId, onClose }: TenderPricing
         </div>
     );
 }
+
