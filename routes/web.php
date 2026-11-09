@@ -20,7 +20,13 @@ Route::middleware('guest')->group(function () {
 });
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth');
 Route::get('/subscription', [\App\Http\Controllers\SubscriptionStatusController::class, 'show'])->middleware('auth');
-Route::get('/portal/document/{id}', [TradeController::class, 'publicDocument'])->name('portal.document.public')->middleware('signed');
+Route::get('/portal/document/{id}', [TradeController::class, 'publicDocument'])->name('portal.document.public');
+Route::post('/portal/document/{id}/paynow', [\App\Http\Controllers\PaynowController::class, 'initiate'])->name('portal.paynow.initiate');
+Route::post('/portal/paynow/webhook', [\App\Http\Controllers\PaynowController::class, 'webhook'])->name('portal.paynow.webhook');
+Route::get('/portal/paynow/check/{ref}', [\App\Http\Controllers\PaynowController::class, 'checkStatus'])->name('portal.paynow.check');
+Route::get('/portal/paynow/mock-checkout', [\App\Http\Controllers\PaynowController::class, 'mockCheckout'])->name('portal.paynow.mock-checkout');
+Route::post('/portal/paynow/mock-complete', [\App\Http\Controllers\PaynowController::class, 'mockComplete'])->name('portal.paynow.mock-complete');
+
 Route::middleware(['auth', 'platform'])->prefix('platform')->group(function () {
     Route::get('/organizations', [\App\Http\Controllers\PlatformOrganizationController::class, 'index']);
     Route::patch('/organizations/{tenantId}/subscription', [\App\Http\Controllers\PlatformOrganizationController::class, 'updateSubscription']);

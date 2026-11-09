@@ -17,6 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [HandleInertiaRequests::class]);
+        $middleware->validateCsrfTokens(except: [
+            'portal/paynow/webhook',
+        ]);
         $middleware->alias(['tenant' => SetTenant::class, 'module' => ModuleEnabled::class, 'platform' => RequirePlatformStaff::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

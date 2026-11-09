@@ -37,3 +37,4 @@ class TradeDocumentMail extends Mailable
         );
     }
 }
+

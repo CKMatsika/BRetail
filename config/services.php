@@ -40,4 +40,11 @@ return [
         'model' => env('GEMINI_MODEL', 'gemini-1.5-flash'),
     ],
 
+    'paynow' => [
+        'integration_id' => env('PAYNOW_INTEGRATION_ID'),
+        'integration_key' => env('PAYNOW_INTEGRATION_KEY'),
+        'result_url' => env('PAYNOW_RESULT_URL'),
+        'return_url' => env('PAYNOW_RETURN_URL'),
+    ],
+
 ];

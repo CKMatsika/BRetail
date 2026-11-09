@@ -845,4 +845,72 @@ class TradeTest extends TestCase
         $tamperedUrl = $signedUrl.'invalid';
         $this->get($tamperedUrl)->assertForbidden();
     }
+
+    public function test_paynow_initiate_and_webhook_settlement_on_invoice(): void
+    {
+        $this->receive($this->order(), '5');
+        $quote = $this->quote();
+        $invoice = app(TradeSales::class)->invoice($this->u, $quote->id, $this->request(['accepted' => true]));
+
+        $initRes = $this->postJson("/portal/document/{$invoice->id}/paynow", [
+            'email' => 'buyer@zimtrade.co.zw',
+            'phone' => '0771234567',
+        ])->assertOk();
+
+        $ref = $initRes->json('reference');
+        $this->assertNotEmpty($ref);
+        $this->assertDatabaseHas('paynow_transactions', [
+            'document_id' => $invoice->id,
+            'reference' => $ref,
+            'status' => 'initiated',
+        ]);
+
+        // Paynow sends IPN callback indicating payment completed
+        $this->postJson('/portal/paynow/webhook', [
+            'reference' => $ref,
+            'paynowreference' => 'PN-987654',
+            'amount' => '10.00',
+            'status' => 'Paid',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('paynow_transactions', [
+            'reference' => $ref,
+            'status' => 'paid',
+            'paynow_reference' => 'PN-987654',
+        ]);
+
+        $ledger = app(TradeLedger::class);
+        $this->assertSame('0.0000', $ledger->outstanding($invoice));
+    }
+
+    public function test_paynow_quotation_auto_invoices_and_settles(): void
+    {
+        $this->receive($this->order(), '5');
+        $quote = $this->quote();
+
+        $initRes = $this->postJson("/portal/document/{$quote->id}/paynow", [
+            'email' => 'client@quotes.co.zw',
+        ])->assertOk();
+
+        $ref = $initRes->json('reference');
+
+        // Customer pays quotation online
+        $this->postJson('/portal/paynow/webhook', [
+            'reference' => $ref,
+            'paynowreference' => 'PN-QUOTE-1234',
+            'amount' => '10.00',
+            'status' => 'Paid',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('paynow_transactions', [
+            'reference' => $ref,
+            'status' => 'paid',
+        ]);
+
+        // Quotation should now have a corresponding paid invoice
+        $invoice = TradeDocument::where('parent_id', $quote->id)->where('kind', 'invoice')->first();
+        $this->assertNotNull($invoice);
+        $ledger = app(TradeLedger::class);
+        $this->assertSame('0.0000', $ledger->outstanding($invoice));
+    }
 }

@@ -128,15 +128,51 @@ final class TradeController
 
     public function publicDocument(Request $r, string $id)
     {
+        if (! $r->hasValidSignatureWhileIgnoring(['payment', 'ref', 'status']) && ! auth()->check()) {
+            abort(403, 'This secure link is invalid or has expired.');
+        }
+
         $doc = TradeDocument::withoutGlobalScopes()->findOrFail($id);
         $company = Company::withoutGlobalScopes()->where('tenant_id', $doc->tenant_id)->first() ?? Company::firstOrFail();
         $kind = str_replace('_', ' ', $doc->kind);
+
+        app(\App\Services\TenantContext::class)->id = $doc->tenant_id;
+        $ledger = app(\App\Services\TradeLedger::class);
+        $outstanding = in_array($doc->kind, ['invoice', 'opening_receivable'], true)
+            ? (string) \Brick\Math\BigDecimal::of($ledger->outstanding($doc))
+            : (string) \Brick\Math\BigDecimal::of($doc->total);
+
+        $isPaid = in_array($doc->kind, ['invoice', 'opening_receivable'], true) && \Brick\Math\BigDecimal::of($outstanding)->isLessThanOrEqualTo(0);
+        $canPayOnline = ! $isPaid && in_array($doc->kind, ['invoice', 'quote'], true) && \Brick\Math\BigDecimal::of($outstanding)->isPositive();
+
+        $paymentNotice = null;
+        if ($r->query('payment') === 'return') {
+            $ref = $r->query('ref');
+            $tx = $ref ? \App\Models\PaynowTransaction::withoutGlobalScopes()->where('reference', $ref)->first() : null;
+            if ($tx) {
+                if ($tx->status === 'paid' || $isPaid) {
+                    $paymentNotice = [
+                        'type' => 'success',
+                        'message' => "Thank you! Your payment of {$company->base_currency} " . number_format((float) $tx->amount, 2) . ' via Paynow was received.',
+                    ];
+                } else {
+                    $paymentNotice = [
+                        'type' => 'info',
+                        'message' => 'Payment return detected. Payment verification is processing in the background.',
+                    ];
+                }
+            }
+        }
 
         return view('trade.document', [
             'document' => app(\App\Services\TradeDocuments::class)->present($doc),
             'company' => $company,
             'kind' => $kind,
             'is_public' => true,
+            'outstanding' => $outstanding,
+            'is_paid' => $isPaid,
+            'can_pay_online' => $canPayOnline,
+            'payment_notice' => $paymentNotice,
         ]);
     }
 
@@ -156,7 +192,8 @@ final class TradeController
         $cleanPhone = preg_replace('/[^0-9]/', '', $recipientPhone);
 
         $defaultSubject = "{$kind} #{$presented['number']} from {$company->name}";
-        $defaultMessage = "Dear {$presented['party_name']},\n\nPlease find your {$kind} #{$presented['number']} from {$company->name} totaling {$company->base_currency} " . number_format((float) ($doc->total ?? 0), 2) . ".\n\nYou can view and download your official document here:\n{$signedUrl}\n\nThank you for your business!";
+        $payOnlineText = in_array($doc->kind, ['invoice', 'quote']) ? "\n\nYou can also pay securely online using EcoCash, OneMoney, InnBucks, or Card (Paynow)." : '';
+        $defaultMessage = "Dear {$presented['party_name']},\n\nPlease find your {$kind} #{$presented['number']} from {$company->name} totaling {$company->base_currency} " . number_format((float) ($doc->total ?? 0), 2) . ".{$payOnlineText}\n\nView, download, or pay your document here:\n{$signedUrl}\n\nThank you for your business!";
 
         $whatsappUrl = "https://wa.me/{$cleanPhone}?text=" . rawurlencode($defaultMessage);
 

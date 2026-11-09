@@ -81,11 +81,18 @@
 
             <!-- Call to Action Button -->
             <div style="text-align:center;margin:32px 0;">
-                <a href="{{ $portalUrl }}" target="_blank" style="display:inline-block;padding:14px 32px;background-color:#2563eb;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;border-radius:8px;box-shadow:0 4px 12px rgba(37,99,235,0.25);">
-                    View & Print Document Online →
-                </a>
-                <p style="margin:10px 0 0 0;font-size:11px;color:#94a3b8;">
-                    No login required. This secure link is valid for 60 days.
+                <div style="margin-bottom:12px;">
+                    <a href="{{ $portalUrl }}" target="_blank" style="display:inline-block;padding:14px 28px;background-color:#2563eb;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;border-radius:8px;box-shadow:0 4px 12px rgba(37,99,235,0.25);margin:4px;">
+                        View & Print Document Online →
+                    </a>
+                    @if(in_array(strtolower($document->kind), ['invoice', 'quote']))
+                    <a href="{{ $portalUrl }}#paynow" target="_blank" style="display:inline-block;padding:14px 28px;background-color:#008751;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;border-radius:8px;box-shadow:0 4px 12px rgba(0,135,81,0.25);margin:4px;">
+                        ⚡ Pay Online (EcoCash / Card)
+                    </a>
+                    @endif
+                </div>
+                <p style="margin:6px 0 0 0;font-size:11px;color:#94a3b8;">
+                    No login required. Secure payment powered by Paynow Zimbabwe.
                 </p>
             </div>
 
@@ -122,3 +129,4 @@
 </table>
 </body>
 </html>
+
