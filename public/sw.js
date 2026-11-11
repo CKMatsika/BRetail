@@ -1,6 +1,6 @@
 const CACHE_PREFIX = "bretail-static-";
-const CACHE_NAME = `${CACHE_PREFIX}v1`;
-const APP_SHELL = ["/offline.html", "/manifest.webmanifest", "/icons/bretail.svg"];
+const CACHE_NAME = `${CACHE_PREFIX}v2`;
+const APP_SHELL = ["/offline.html", "/manifest.webmanifest", "/icons/bretail.svg", "/icons/bretail-192.png", "/icons/bretail-512.png"];
 
 self.addEventListener("install", event => {
   event.waitUntil((async () => {
