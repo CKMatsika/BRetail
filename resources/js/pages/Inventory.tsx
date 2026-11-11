@@ -40,6 +40,7 @@ type Classification = {
     level: string;
     parent_id: number | null;
 };
+type TaxRate = { id: string; name: string; rate: string | number; type: "standard" | "zero" | "exempt" };
 type Warehouse = { id: number; name: string; branch_id: number };
 type Count = {
     id: number;
@@ -54,6 +55,8 @@ type Count = {
 };
 export type InventoryProps = {
     products?: Product[];
+    taxRates?: TaxRate[];
+    defaultTax?: { name: string; rate: string | number };
     classifications?: Classification[];
     warehouses?: Warehouse[];
     balances?: {
@@ -123,10 +126,14 @@ const attributesForForm = (
 function ProductForm({
     product,
     classes,
+    taxRates,
+    defaultTax,
     close,
 }: {
     product?: Product;
     classes: Classification[];
+    taxRates: TaxRate[];
+    defaultTax: { name: string; rate: string | number };
     close: () => void;
 }) {
     const f = useForm({
@@ -135,7 +142,7 @@ function ProductForm({
         description: product?.description ?? "",
         brand: product?.brand ?? "",
         unit: product?.unit ?? "each",
-        tax_class: product?.tax_class ?? "standard",
+        tax_class: product?.tax_class ?? taxRates.find((tax) => tax.type === "standard")?.id ?? "standard",
         warranty_months: product?.warranty_months ?? 0,
         department_id: product?.department_id ?? "",
         category_id: product?.category_id ?? "",
@@ -176,7 +183,7 @@ function ProductForm({
                     </small>
                 </label>
                 <div className="form-grid">
-                    {(["name", "brand", "unit", "tax_class"] as const).map(
+                    {(["name", "brand", "unit"] as const).map(
                         (k) => (
                             <label className="field" key={k}>
                                 {k === "name"
@@ -192,6 +199,15 @@ function ProductForm({
                             </label>
                         ),
                     )}
+                    <label className="field">
+                        Tax applied
+                        <select value={f.data.tax_class} onChange={(e) => f.setData("tax_class", e.target.value)}>
+                            <option value="standard">Company default ({defaultTax.name}, {defaultTax.rate}%)</option>
+                            <option value="zero">Zero-rated (0%)</option>
+                            <option value="exempt">VAT exempt</option>
+                            {taxRates.filter((tax) => tax.id !== "legacy-default").map((tax) => <option key={tax.id} value={tax.id}>{tax.name} ({tax.type === "standard" ? `${tax.rate}%` : tax.type === "zero" ? "0% zero-rated" : "Exempt"})</option>)}
+                        </select>
+                    </label>
                 </div>
                 <label className="field">
                     Description
@@ -1477,6 +1493,8 @@ export default function Inventory(
                 <ProductForm
                     product={product === true ? undefined : product}
                     classes={classes}
+                    taxRates={p.taxRates ?? []}
+                    defaultTax={p.defaultTax ?? { name: "Tax", rate: 0 }}
                     close={() => setProduct(null)}
                 />
             )}{" "}

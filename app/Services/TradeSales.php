@@ -49,12 +49,12 @@ final class TradeSales
             $t->date($d['date']);
             $customer = PosCustomer::findOrFail($d['customer_id']);
             $items = [];
-            $rate = (string) (Company::firstOrFail()->settings['tax_rate'] ?? '0');
+            $company = Company::firstOrFail();
             foreach ($d['items'] as $i) {
                 $v = ProductVariant::with('product')->findOrFail($i['variant_id']);
                 if (! $v->active || ! $v->product->active || ! BigDecimal::of($i['quantity'])->isPositive()) {
                     TradeLedger::fail('Choose active products and positive quantities.');
-                }$tax = $v->product->tax_class === 'standard' ? $rate : '0';
+                }$tax = TaxRateResolver::forClass($company, $v->product->tax_class);
                 $items[] = [...$i, 'prices_include_vat' => (bool) ($d['prices_include_vat'] ?? false), 'description' => $v->product->name.' / '.$v->name, 'sku' => $v->sku, 'tax_rate' => $tax, ...PosMath::line($i['quantity'], $i['unit_price'], $i['discount_percent'], $tax, (bool) ($d['prices_include_vat'] ?? false))];
             }
             $converted = app(TradeCurrency::class)->convert($items, $d['currency'] ?? null, $d['date']);

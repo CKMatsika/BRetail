@@ -267,6 +267,12 @@ function Errors({ errors }: { errors: Record<string, string | undefined> }) {
         </div>
     ) : null;
 }
+const newTaxProfileId = () =>
+    globalThis.crypto?.randomUUID?.() ??
+    "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+    });
 function BranchForm({
     branch,
     onClose,
@@ -492,8 +498,8 @@ function CompanyForm({
         settings: {
             ...company.settings,
             tax_rates: Array.isArray(company.settings.tax_rates)
-                ? company.settings.tax_rates
-                : [{ name: company.settings.tax_label || "VAT", rate: Number(company.settings.tax_rate || 0), type: Number(company.settings.tax_rate || 0) === 0 ? "zero" : "standard" }],
+                ? company.settings.tax_rates.map((tax: any) => ({ ...tax, id: tax.id ?? newTaxProfileId() }))
+                : [{ id: newTaxProfileId(), name: company.settings.tax_label || "VAT", rate: Number(company.settings.tax_rate || 0), type: Number(company.settings.tax_rate || 0) === 0 ? "zero" : "standard" }],
         },
     });
     return (
@@ -613,7 +619,7 @@ function CompanyForm({
                         {editable && <button type="button" className="secondary" onClick={() => f.setData("settings", { ...f.data.settings, tax_rates: f.data.settings.tax_rates.filter((_: any, i: number) => i !== index) })}>Remove</button>}
                     </div>
                 ))}
-                {editable && <button type="button" className="secondary" onClick={() => f.setData("settings", { ...f.data.settings, tax_rates: [...f.data.settings.tax_rates, { name: "", rate: 0, type: "zero" }] })}>Add tax rate</button>}
+                {editable && <button type="button" className="secondary" onClick={() => f.setData("settings", { ...f.data.settings, tax_rates: [...f.data.settings.tax_rates, { id: newTaxProfileId(), name: "", rate: 0, type: "zero" }] })}>Add tax rate</button>}
             </section>
             <div className="notice">
                 Base currency: {company.base_currency} · Accepted:{" "}

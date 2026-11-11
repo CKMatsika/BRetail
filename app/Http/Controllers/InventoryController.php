@@ -29,7 +29,9 @@ class InventoryController
         $warehouseIds = $warehouses->pluck('id');
         $recentCountIds = StockCount::whereIn('warehouse_id', $warehouseIds)->latest('id')->limit(30)->pluck('id');
 
-        return ['products' => Product::with('variants')->orderBy('name')->get(), 'classifications' => Classification::orderBy('name')->get(), 'warehouses' => $warehouses, 'balances' => StockBalance::whereIn('warehouse_id', $warehouseIds)->get(), 'movements' => StockMovement::whereIn('warehouse_id', $warehouseIds)->when($filters['before_id'] ?? null, fn ($q, $id) => $q->where('id', '<', $id))->with('variant', 'document')->latest('id')->limit(100)->get(), 'counts' => StockCount::whereIn('warehouse_id', $warehouseIds)->where(fn ($q) => $q->whereIn('id', $recentCountIds)->orWhere('status', 'draft'))->with('lines.variant')->latest('id')->get()];
+        $settings = Company::firstOrFail()->settings;
+        $taxRates = $settings['tax_rates'] ?? [];
+        return ['products' => Product::with('variants')->orderBy('name')->get(), 'taxRates' => $taxRates, 'defaultTax' => ['name' => $settings['tax_label'] ?? 'Tax', 'rate' => $settings['tax_rate'] ?? '0'], 'classifications' => Classification::orderBy('name')->get(), 'warehouses' => $warehouses, 'balances' => StockBalance::whereIn('warehouse_id', $warehouseIds)->get(), 'movements' => StockMovement::whereIn('warehouse_id', $warehouseIds)->when($filters['before_id'] ?? null, fn ($q, $id) => $q->where('id', '<', $id))->with('variant', 'document')->latest('id')->limit(100)->get(), 'counts' => StockCount::whereIn('warehouse_id', $warehouseIds)->where(fn ($q) => $q->whereIn('id', $recentCountIds)->orWhere('status', 'draft'))->with('lines.variant')->latest('id')->get()];
     }
 
     public function page(Request $r)

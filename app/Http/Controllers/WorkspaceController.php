@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\DeviceEnrollment;
 use App\Models\PosHold;
 use App\Models\PosSession;
+use App\Models\Product;
 use App\Models\Role;
 use App\Models\StockCount;
 use App\Models\Tenant;
@@ -163,9 +164,14 @@ class WorkspaceController
     public function company(Request $r)
     {
         $this->permit($r, 'company.configure');
-        $data = $r->validate(['name' => 'required|string|max:160', 'settings.registration' => 'nullable|string|max:120', 'settings.tax_id' => 'nullable|string|max:120', 'settings.vat_number' => 'nullable|string|max:120', 'settings.alternative_phone' => 'nullable|string|max:40', 'settings.banking_details' => 'nullable|string|max:2000', 'settings.phone' => 'nullable|string|max:40', 'settings.contact_email' => 'nullable|email|max:255', 'settings.address' => 'nullable|string|max:255', 'settings.receipt_footer' => 'nullable|string|max:255', 'settings.invoice_prefix' => 'required|alpha_dash|max:20', 'settings.tax_rates' => 'sometimes|array|max:30', 'settings.tax_rates.*.name' => 'required|string|max:80', 'settings.tax_rates.*.rate' => 'required|numeric|between:0,100', 'settings.tax_rates.*.type' => 'required|in:standard,zero,exempt']);
+        $data = $r->validate(['name' => 'required|string|max:160', 'settings.registration' => 'nullable|string|max:120', 'settings.tax_id' => 'nullable|string|max:120', 'settings.vat_number' => 'nullable|string|max:120', 'settings.alternative_phone' => 'nullable|string|max:40', 'settings.banking_details' => 'nullable|string|max:2000', 'settings.phone' => 'nullable|string|max:40', 'settings.contact_email' => 'nullable|email|max:255', 'settings.address' => 'nullable|string|max:255', 'settings.receipt_footer' => 'nullable|string|max:255', 'settings.invoice_prefix' => 'required|alpha_dash|max:20', 'settings.tax_rates' => 'sometimes|array|max:30', 'settings.tax_rates.*.id' => 'nullable|uuid|distinct', 'settings.tax_rates.*.name' => 'required|string|max:80', 'settings.tax_rates.*.rate' => 'required|numeric|between:0,100', 'settings.tax_rates.*.type' => 'required|in:standard,zero,exempt']);
         if (isset($data['settings']['tax_rates'])) {
-            $data['settings']['tax_rates'] = array_values(array_map(fn ($tax) => [...$tax, 'rate' => in_array($tax['type'], ['zero', 'exempt'], true) ? 0 : $tax['rate']], $data['settings']['tax_rates']));
+            $data['settings']['tax_rates'] = array_values(array_map(fn ($tax) => [...$tax, 'id' => $tax['id'] ?? (string) \Illuminate\Support\Str::uuid(), 'rate' => in_array($tax['type'], ['zero', 'exempt'], true) ? 0 : $tax['rate']], $data['settings']['tax_rates']));
+            $newIds = collect($data['settings']['tax_rates'])->pluck('id');
+            $removedInUse = Product::whereNotIn('tax_class', ['standard', 'zero', 'exempt'])->whereNotIn('tax_class', $newIds)->exists();
+            if ($removedInUse) {
+                throw ValidationException::withMessages(['settings.tax_rates' => 'Reassign products using a tax profile before removing it.']);
+            }
         }
         DB::transaction(function () use ($data) {
             $company = Company::firstOrFail();

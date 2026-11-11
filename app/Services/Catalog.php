@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Branch;
 use App\Models\Classification;
+use App\Models\Company;
 use App\Models\PosSaleItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -53,6 +54,9 @@ final class Catalog
     {
         InventoryAccess::permit($user, 'inventory.configure');
         $d = Validator::make($input, ['item_type' => ['sometimes', 'required', Rule::in(['stock', 'service'])], 'name' => 'required|string|max:160', 'description' => 'nullable|string|max:5000', 'department_id' => 'nullable|integer', 'category_id' => 'nullable|integer', 'subcategory_id' => 'nullable|integer', 'brand' => 'nullable|string|max:120', 'unit' => 'required|string|max:30', 'tax_class' => 'required|string|max:60', 'warranty_months' => 'required|integer|between:0,240', 'attributes' => 'present|array|max:30', 'attributes.*' => 'nullable|string|max:255', 'active' => 'required|boolean'])->validate();
+        if (! in_array($d['tax_class'], ['standard', 'zero', 'exempt'], true) && ! collect(Company::firstOrFail()->settings['tax_rates'] ?? [])->contains(fn ($tax) => ($tax['id'] ?? null) === $d['tax_class'])) {
+            throw ValidationException::withMessages(['tax_class' => 'Choose a tax profile configured in Company settings.']);
+        }
 
         return DB::transaction(function () use ($d, $product) {
             $this->lock();

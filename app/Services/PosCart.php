@@ -49,9 +49,7 @@ final class PosCart
             }if ($discount->isGreaterThan('100') || (! $user->canDo('pos.discount.override') && $discount->isGreaterThan(config('pos.cashier_discount_limit')))) {
                 throw ValidationException::withMessages(['discount' => 'This discount requires a manager with discount override permission.']);
             }
-            $taxRate = match ($v->product->tax_class) {
-                'standard' => $rate,'exempt','zero' => '0',default => throw ValidationException::withMessages(['tax' => 'Product tax classification has no configured rate.'])
-            };
+            $taxRate = TaxRateResolver::forClass($company, $v->product->tax_class);
             $values = PosMath::line($line['quantity'], $v->selling_price, $line['discount_percent'], $taxRate);
             $balance = StockBalance::where('warehouse_id', $d['warehouse_id'])->where('variant_id', $v->id)->first();
             if ($v->product->item_type !== 'service' && $quantity->isGreaterThan($balance?->quantity ?? '0')) {
