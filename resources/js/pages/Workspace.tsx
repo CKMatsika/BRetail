@@ -6,6 +6,7 @@ import Accounting, { AccountingData } from "./Accounting";
 import Trade, { TradeData } from "./Trade";
 import Hr, { HrData } from "./Hr";
 import Payroll, { PayrollData } from "./Payroll";
+import Manufacturing from "./Manufacturing";
 import DeviceManager from "./DeviceManager";
 import Reports, { AnalyticsData } from "./Reports";
 import Loyalty, { LoyaltyData } from "./Loyalty";
@@ -40,6 +41,7 @@ import {
     ArrowRight,
     Smartphone,
     Award,
+    Factory,
 } from "lucide-react";
 type Branch = {
     id: number;
@@ -77,6 +79,7 @@ type Props = InventoryProps &
         analytics?: AnalyticsData;
         loyalty?: LoyaltyData;
         compliance?: ComplianceData;
+        manufacturing?: React.ComponentProps<typeof Manufacturing>["data"];
         tenders_data?: TenderData;
         user: { id: number; name: string };
         role: string;
@@ -144,6 +147,7 @@ const nav = [
         permission: "tenders.view",
     },
     { key: "compliance", label: "Compliance documents", icon: ShieldCheck, permission: "compliance.view" },
+    { key: "manufacturing", label: "Manufacturing", icon: Factory, permission: "manufacturing.view" },
     {
         key: "sales",
         label: "Customers & sales",
@@ -231,6 +235,7 @@ const navigationOrder = [
     "tenders",
     "compliance",
     "inventory",
+    "manufacturing",
     "loyalty",
     "backoffice",
     "accounting",
@@ -1361,6 +1366,7 @@ export default function Workspace(p: Props) {
                             baseCurrency={p.company.base_currency}
                         />
                     )}
+                    {p.section === "manufacturing" && p.manufacturing && <Manufacturing data={p.manufacturing} />}
                     {p.section === "company" && (
                         <>
                             <CompanyForm company={p.company} editable={can("company.configure")} />

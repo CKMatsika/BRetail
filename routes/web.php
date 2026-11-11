@@ -53,6 +53,14 @@ Route::middleware(['auth', 'tenant', 'module:pos', 'module:inventory'])->control
     Route::get('/pos/returns/{id}/receipt', 'returnReceipt');
 });
 Route::get('/inventory', [InventoryController::class, 'page'])->middleware(['auth', 'tenant', 'module:inventory']);
+Route::middleware(['auth', 'tenant', 'module:manufacturing', 'module:inventory'])->controller(\App\Http\Controllers\ManufacturingController::class)->group(function () {
+    Route::get('/manufacturing', 'page');
+    Route::post('/manufacturing/recipes', 'recipe');
+    Route::patch('/manufacturing/recipes/{id}', 'recipe');
+    Route::post('/manufacturing/orders', 'order');
+    Route::post('/manufacturing/orders/{id}/complete', 'complete');
+    Route::post('/manufacturing/orders/{id}/cancel', 'cancel');
+});
 Route::middleware(['auth', 'tenant'])->controller(WorkspaceController::class)->group(function () {
     Route::post('/company/logo', [CompanyLogoController::class, 'store'])->middleware('module:administration');
     Route::get('/company/logo', [CompanyLogoController::class, 'show']);

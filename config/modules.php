@@ -6,6 +6,7 @@ return [
     'access' => ['name' => 'Team & access', 'phase' => 1, 'required' => true, 'depends' => []],
     'administration' => ['name' => 'Administration', 'phase' => 1, 'required' => true, 'depends' => []],
     'inventory' => ['name' => 'Inventory', 'phase' => 2, 'available' => true, 'depends' => ['branches']],
+    'manufacturing' => ['name' => 'Manufacturing & production', 'phase' => 10, 'available' => true, 'depends' => ['inventory']],
     'pos' => ['name' => 'Point of sale', 'phase' => 3, 'available' => true, 'depends' => ['inventory'], 'live_depends' => ['accounting']],
     'sales' => ['name' => 'Sales & customers', 'phase' => 5, 'available' => true, 'depends' => ['inventory', 'accounting']],
     'accounting' => ['name' => 'Accounting & finance', 'phase' => 4, 'available' => true, 'depends' => ['inventory']],
