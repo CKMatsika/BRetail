@@ -16,7 +16,7 @@ class PayrollRunLine extends TenantRecord
 
     protected function casts(): array
     {
-        return ['snapshot' => 'array', 'gross_salary' => 'decimal:2', 'taxable_income' => 'decimal:2', 'paye' => 'decimal:2', 'aids_levy' => 'decimal:2', 'nssa_employee' => 'decimal:2', 'nssa_employer' => 'decimal:2', 'net_pay' => 'decimal:2'];
+        return ['snapshot' => 'array', 'gross_salary' => 'decimal:2', 'taxable_income' => 'decimal:2', 'paye' => 'decimal:2', 'aids_levy' => 'decimal:2', 'nssa_employee' => 'decimal:2', 'nssa_employer' => 'decimal:2', 'apwcs_employer' => 'decimal:2', 'net_pay' => 'decimal:2'];
     }
 
     protected static function booted(): void

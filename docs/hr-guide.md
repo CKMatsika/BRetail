@@ -6,8 +6,6 @@ People & HR lets authorized users add employees with a unique employee number, h
 
 Date of birth is an optional confidential field visible and editable only with the separate `hr.personal.view` and `hr.personal.manage` permissions. It is omitted from general directory and employment-history snapshots and is used by payroll to check NSSA's age cutoff.
 
-Date of birth is an optional confidential field visible and editable only with the separate `hr.personal.view` and `hr.personal.manage` permissions. It is omitted from general directory and employment-history snapshots and is used by payroll to check NSSA's age cutoff.
-
 HR administrators can configure leave types with a paid/unpaid flag and an annual day entitlement. Entitlements are company policy settings, not assumed statutory values. Requests record a date range, requested workdays and reason, then require a different authorized user to approve or reject. The system prevents overlapping pending/approved requests, rejects approval beyond the employee's configured balance, and serializes competing decisions. Requests must stay within one calendar year; enter the workday count according to the business work schedule.
 
 Employee visibility follows the user's branch access. System administrators, business owners and HR officers can manage records across the company. General managers can view records and history. Payroll officers can view the directory. The history panel requires the separate `hr.history.view` permission.

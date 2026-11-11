@@ -65,6 +65,15 @@ class PayrollController
         return ['eligible' => true, 'basis' => 'coverage_confirmed_under_65_and_in_scope'];
     }
 
+    private function apwcsStatus(Employee $employee, CarbonImmutable $asOf): array
+    {
+        if ($employee->employment_category === 'civil_servant') return ['eligible' => false, 'basis' => 'civil_servant_exemption'];
+        if (! $employee->date_of_birth) throw ValidationException::withMessages(['employees' => 'Record a confidential date of birth before payroll can check NSSA APWCS age coverage for '.$employee->employee_number.'.']);
+        $age = CarbonImmutable::parse($employee->date_of_birth)->diffInYears($asOf);
+        if ($age <= 16) return ['eligible' => false, 'basis' => 'under_17'];
+        return ['eligible' => true, 'basis' => 'apwcs_over_16_non_civil_servant'];
+    }
+
     private function taxYearContext(Employee $employee, CarbonImmutable $periodStart, string $currency): array
     {
         $yearStart = $periodStart->startOfYear();
@@ -160,14 +169,14 @@ class PayrollController
             'USD' => ['effective_from' => '2026-01-01', 'effective_to' => '2026-12-31', 'paye_bands' => [
                 ['up_to' => 100, 'rate' => 0, 'deduct' => 0], ['up_to' => 300, 'rate' => 20, 'deduct' => 20], ['up_to' => 1000, 'rate' => 25, 'deduct' => 35],
                 ['up_to' => 2000, 'rate' => 30, 'deduct' => 85], ['up_to' => 3000, 'rate' => 35, 'deduct' => 185], ['up_to' => null, 'rate' => 40, 'deduct' => 335],
-            ], 'daily_paye_bands' => null, 'proration_basis' => 'none', 'proration_source_name' => null, 'proration_source_url' => null, 'aids_levy_rate' => 3, 'nssa_employee_rate' => null, 'nssa_employer_rate' => null, 'nssa_ceiling' => null, 'nssa_ceiling_currency' => null, 'source_name' => $source, 'source_url' => 'https://www.zimra.co.zw/?download=4523:usd-paye-tax-tables-2026', 'nssa_source_name' => null, 'nssa_source_url' => null],
+            ], 'daily_paye_bands' => null, 'proration_basis' => 'none', 'proration_source_name' => null, 'proration_source_url' => null, 'aids_levy_rate' => 3, 'nssa_employee_rate' => null, 'nssa_employer_rate' => null, 'nssa_ceiling' => null, 'nssa_ceiling_currency' => null, 'apwcs_employer_rate' => null, 'apwcs_industry_code' => null, 'apwcs_source_name' => null, 'apwcs_source_url' => null, 'source_name' => $source, 'source_url' => 'https://www.zimra.co.zw/?download=4523:usd-paye-tax-tables-2026', 'nssa_source_name' => null, 'nssa_source_url' => null],
             'ZWG' => ['effective_from' => '2026-01-01', 'effective_to' => '2026-12-31', 'paye_bands' => [
                 ['up_to' => 2800, 'rate' => 0, 'deduct' => 0], ['up_to' => 8400, 'rate' => 20, 'deduct' => 560], ['up_to' => 28000, 'rate' => 25, 'deduct' => 980],
                 ['up_to' => 56000, 'rate' => 30, 'deduct' => 2380], ['up_to' => 84000, 'rate' => 35, 'deduct' => 5180], ['up_to' => null, 'rate' => 40, 'deduct' => 9380],
             ], 'daily_paye_bands' => [
                 ['up_to' => 92.05, 'rate' => 0, 'deduct' => 0], ['up_to' => 276.16, 'rate' => 20, 'deduct' => 18.41], ['up_to' => 920.55, 'rate' => 25, 'deduct' => 32.22],
                 ['up_to' => 1841.10, 'rate' => 30, 'deduct' => 78.25], ['up_to' => 2761.64, 'rate' => 35, 'deduct' => 170.30], ['up_to' => null, 'rate' => 40, 'deduct' => 308.38],
-            ], 'proration_basis' => 'calendar_days', 'proration_source_name' => $source.' · ZWG daily table', 'proration_source_url' => 'https://www.zimra.co.zw/domestic-taxes/tax-tables?download=4522:zwg-paye-tax-tables-2026', 'aids_levy_rate' => 3, 'nssa_employee_rate' => null, 'nssa_employer_rate' => null, 'nssa_ceiling' => null, 'nssa_ceiling_currency' => null, 'source_name' => $source, 'source_url' => 'https://www.zimra.co.zw/domestic-taxes/tax-tables?download=4522:zwg-paye-tax-tables-2026', 'nssa_source_name' => null, 'nssa_source_url' => null],
+            ], 'proration_basis' => 'calendar_days', 'proration_source_name' => $source.' · ZWG daily table', 'proration_source_url' => 'https://www.zimra.co.zw/domestic-taxes/tax-tables?download=4522:zwg-paye-tax-tables-2026', 'aids_levy_rate' => 3, 'nssa_employee_rate' => null, 'nssa_employer_rate' => null, 'nssa_ceiling' => null, 'nssa_ceiling_currency' => null, 'apwcs_employer_rate' => null, 'apwcs_industry_code' => null, 'apwcs_source_name' => null, 'apwcs_source_url' => null, 'source_name' => $source, 'source_url' => 'https://www.zimra.co.zw/domestic-taxes/tax-tables?download=4522:zwg-paye-tax-tables-2026', 'nssa_source_name' => null, 'nssa_source_url' => null],
         ];
     }
 
@@ -202,7 +211,7 @@ class PayrollController
                     'postings' => $run->postings->map(fn ($p) => $p->only('id', 'journal_id', 'book', 'kind', 'date', 'reason')),
                     'lines' => $request->user()->canDo('payroll.compensation.view') ? $run->lines->map(function ($line) use ($request, $run, $hasReversal, $payslipEmailReady) {
                         $lastDelivery = $line->payslipDeliveries->sortByDesc('id')->first();
-                        return [...$line->only('id', 'gross_salary', 'taxable_income', 'paye', 'aids_levy', 'nssa_employee', 'nssa_employer', 'net_pay'), ...$line->snapshot,
+                        return [...$line->only('id', 'gross_salary', 'taxable_income', 'paye', 'aids_levy', 'nssa_employee', 'nssa_employer', 'apwcs_employer', 'net_pay'), ...$line->snapshot,
                             'can_email_payslip' => $payslipEmailReady && $request->user()->canDo('payroll.payslips.email') && $run->status === 'approved' && ! $hasReversal && filled($line->employee?->email),
                             'payslip_email_status' => $lastDelivery?->status,
                             'payslip_email_sent_at' => $lastDelivery?->sent_at?->toIso8601String(),
@@ -211,7 +220,7 @@ class PayrollController
             })
             : collect();
         return [
-            'rules' => PayrollRuleSet::orderByDesc('effective_from')->orderByDesc('id')->get()->map(fn ($r) => [...$r->only('id', 'jurisdiction', 'currency', 'frequency', 'effective_from', 'effective_to', 'paye_bands', 'daily_paye_bands', 'proration_basis', 'proration_source_name', 'proration_source_url', 'aids_levy_rate', 'nssa_employee_rate', 'nssa_employer_rate', 'nssa_ceiling', 'nssa_ceiling_currency', 'source_name', 'source_url', 'nssa_source_name', 'nssa_source_url', 'status', 'approved_at'), 'can_approve' => $request->user()->canDo('payroll.rules.approve') && $r->created_by !== $request->user()->id]),
+            'rules' => PayrollRuleSet::orderByDesc('effective_from')->orderByDesc('id')->get()->map(fn ($r) => [...$r->only('id', 'jurisdiction', 'currency', 'frequency', 'effective_from', 'effective_to', 'paye_bands', 'daily_paye_bands', 'proration_basis', 'proration_source_name', 'proration_source_url', 'aids_levy_rate', 'nssa_employee_rate', 'nssa_employer_rate', 'nssa_ceiling', 'nssa_ceiling_currency', 'apwcs_employer_rate', 'apwcs_industry_code', 'apwcs_source_name', 'apwcs_source_url', 'source_name', 'source_url', 'nssa_source_name', 'nssa_source_url', 'status', 'approved_at'), 'can_approve' => $request->user()->canDo('payroll.rules.approve') && $r->created_by !== $request->user()->id]),
             'employees' => $employees->map(fn ($e) => [...$e->only('id', 'employee_number', 'legal_name', 'job_title'), 'branch_id' => $e->branch_id]),
             'compensations' => $compensations,
             'runs' => $runs,
@@ -255,12 +264,16 @@ class PayrollController
             'aids_levy_rate' => 'required|numeric|min:0|max:100', 'nssa_employee_rate' => 'nullable|numeric|min:0|max:100', 'nssa_employer_rate' => 'nullable|numeric|min:0|max:100',
             'nssa_ceiling' => 'nullable|numeric|min:0', 'nssa_ceiling_currency' => ['nullable', 'string', Rule::in(['USD', 'ZWG'])], 'source_name' => 'required|string|max:200', 'source_url' => 'required|url|max:1000',
             'nssa_source_name' => 'nullable|string|max:200', 'nssa_source_url' => 'nullable|url|max:1000',
+            'apwcs_employer_rate' => 'nullable|numeric|min:0|max:100', 'apwcs_industry_code' => 'nullable|string|max:40', 'apwcs_source_name' => 'nullable|string|max:200', 'apwcs_source_url' => 'nullable|url|max:1000',
         ]);
         if (is_null($data['nssa_employee_rate'] ?? null) !== is_null($data['nssa_employer_rate'] ?? null)) {
             throw ValidationException::withMessages(['nssa_employee_rate' => 'Enter both NSSA employee and employer rates, or leave both blank.']);
         }
         if (! is_null($data['nssa_employee_rate'] ?? null) && (empty($data['nssa_source_name']) || empty($data['nssa_source_url']))) {
             throw ValidationException::withMessages(['nssa_source_url' => 'Cite the official source for configured NSSA parameters.']);
+        }
+        if (! is_null($data['apwcs_employer_rate'] ?? null) && (empty($data['apwcs_industry_code']) || empty($data['apwcs_source_name']) || empty($data['apwcs_source_url']))) {
+            throw ValidationException::withMessages(['apwcs_source_url' => 'Enter the employer’s NSSA industry code, assigned APWCS rate and the source confirming them.']);
         }
         if (is_null($data['nssa_ceiling'] ?? null) !== is_null($data['nssa_ceiling_currency'] ?? null)) {
             throw ValidationException::withMessages(['nssa_ceiling' => 'Provide both an NSSA ceiling and its currency, or leave both blank.']);
@@ -437,6 +450,7 @@ class PayrollController
                 $nssaStatus = $this->nssaPobsStatus($employee, (bool) $term->nssa_eligible, $periodEnd);
                 $nssaAgeEligible = $nssaStatus['eligible'];
                 $nssaEligibilityBasis = $nssaStatus['basis'];
+                $apwcsStatus = $this->apwcsStatus($employee, $periodEnd);
                 $sumSegmentAmount = function (string $field) use ($segments, $payableDays, $periodStart, $prorate) {
                     if (count($segments) === 1 && $payableDays === $periodStart->daysInMonth) return PosMath::money((string) $segments[0]['term']->{$field});
                     return PosMath::sum(array_map(fn ($segment) => $prorate($segment['term']->{$field}, $segment['days']), $segments), 2);
@@ -457,7 +471,7 @@ class PayrollController
                     'monthly_tax_credits' => '0',
                     'monthly_cash_deductions' => PosMath::sum([$baseCashDeductions, $sumAdjustments($adjustments, ['cash_deduction', 'allowable_deduction'])], 2),
                     'payable_days' => $periodStart->daysInMonth, 'period_days' => $periodStart->daysInMonth, 'daily_tax_basis' => false,
-                    'nssa_eligible' => $nssaAgeEligible, 'employee_number' => $employee->employee_number,
+                    'nssa_eligible' => $nssaAgeEligible, 'apwcs_eligible' => $apwcsStatus['eligible'], 'employee_number' => $employee->employee_number,
                 ]);
                 if ($taxHistory['method'] === 'FDS_AVERAGING') {
                     $calc = [...$calc, ...$this->fdsAverageTax($calculator, $rule, $employee->employee_number, $periodStart, $calc['taxable_income'], $currentCredits, $taxHistory)];
@@ -467,14 +481,14 @@ class PayrollController
                 $calc['net_pay'] = PosMath::money(PosMath::sum([$calc['gross_salary'], '-'.(string) $calc['paye'], '-'.(string) $calc['aids_levy'], '-'.(string) $calc['nssa_employee'], '-'.(string) $calc['cash_deductions']], 2));
                 if (BigDecimal::of($calc['net_pay'])->isNegative()) throw ValidationException::withMessages(['salary' => 'Payroll deductions exceed cash salary for '.$employee->employee_number.'.']);
                 $segmentSnapshots = array_map(fn ($segment) => ['effective_from' => $segment['from']->toDateString(), 'effective_to' => $segment['to']->toDateString(), 'payable_days' => $segment['days'], 'salary_term_id' => $segment['term']->id, 'currency' => $segment['term']->currency, 'monthly_salary' => $segment['term']->monthly_salary, 'prorated_salary' => $prorate($segment['term']->monthly_salary, $segment['days']), 'monthly_recurring_cash_earnings' => $segment['term']->monthly_recurring_cash_earnings, 'monthly_taxable_benefits' => $segment['term']->monthly_taxable_benefits, 'monthly_allowable_deductions' => $segment['term']->monthly_allowable_deductions, 'monthly_tax_credits' => $segment['term']->monthly_tax_credits, 'monthly_cash_deductions' => $segment['term']->monthly_cash_deductions], $segments);
-                $calculations[] = ['employee' => $employee, 'term' => $term, 'calculation' => $calc, 'adjustments' => $adjustments, 'window' => $window, 'segments' => $segmentSnapshots, 'nssa_eligibility_basis' => $nssaEligibilityBasis, 'tax_method' => $taxHistory['method'], 'tax_credit_claimed' => $calc['tax_credit_claimed'], 'cumulative_paye_before_credits' => $calc['cumulative_paye_before_credits'] ?? null, 'cumulative_tax_credit_applied' => $calc['cumulative_tax_credit_applied'] ?? null, 'prorated' => ['monthly_salary' => $baseSalary, 'monthly_recurring_cash_earnings' => $recurringCash, 'monthly_taxable_benefits' => $taxableBenefits, 'monthly_allowable_deductions' => $allowableDeductions, 'monthly_tax_credits' => $taxCredits, 'monthly_cash_deductions' => $baseCashDeductions]];
+                $calculations[] = ['employee' => $employee, 'term' => $term, 'calculation' => $calc, 'adjustments' => $adjustments, 'window' => $window, 'segments' => $segmentSnapshots, 'nssa_eligibility_basis' => $nssaEligibilityBasis, 'apwcs_eligibility_basis' => $apwcsStatus['basis'], 'tax_method' => $taxHistory['method'], 'tax_credit_claimed' => $calc['tax_credit_claimed'], 'cumulative_paye_before_credits' => $calc['cumulative_paye_before_credits'] ?? null, 'cumulative_tax_credit_applied' => $calc['cumulative_tax_credit_applied'] ?? null, 'prorated' => ['monthly_salary' => $baseSalary, 'monthly_recurring_cash_earnings' => $recurringCash, 'monthly_taxable_benefits' => $taxableBenefits, 'monthly_allowable_deductions' => $allowableDeductions, 'monthly_tax_credits' => $taxCredits, 'monthly_cash_deductions' => $baseCashDeductions]];
             }
             $sum = fn ($key) => PosMath::sum(array_map(fn ($row) => $row['calculation'][$key], $calculations), 2);
-            $totals = ['employees' => count($calculations), 'gross_salary' => $sum('gross_salary'), 'taxable_income' => $sum('taxable_income'), 'paye' => $sum('paye'), 'aids_levy' => $sum('aids_levy'), 'nssa_employee' => $sum('nssa_employee'), 'nssa_employer' => $sum('nssa_employer'), 'cash_deductions' => $sum('cash_deductions'), 'net_pay' => $sum('net_pay'), 'employer_cost' => $sum('employer_cost')];
+            $totals = ['employees' => count($calculations), 'gross_salary' => $sum('gross_salary'), 'taxable_income' => $sum('taxable_income'), 'paye' => $sum('paye'), 'aids_levy' => $sum('aids_levy'), 'nssa_employee' => $sum('nssa_employee'), 'nssa_employer' => $sum('nssa_employer'), 'apwcs_employer' => $sum('apwcs_employer'), 'cash_deductions' => $sum('cash_deductions'), 'net_pay' => $sum('net_pay'), 'employer_cost' => $sum('employer_cost')];
             $run = PayrollRun::create(['request_key' => $data['request_key'], 'payload_hash' => $payloadHash, 'rule_set_id' => $rule->id, 'branch_id' => $data['branch_id'], 'period_start' => $periodStart->toDateString(), 'period_end' => $periodEnd->toDateString(), 'currency' => $data['currency'], 'status' => 'draft', 'totals' => $totals, 'created_by' => $request->user()->id]);
             foreach ($calculations as $row) {
                 $employee = $row['employee']; $term = $row['term']; $calc = $row['calculation'];
-                PayrollRunLine::create(['payroll_run_id' => $run->id, 'employee_id' => $employee->id, 'branch_id' => $employee->branch_id, 'snapshot' => ['employee' => $employee->preferred_name ?: $employee->legal_name, 'employee_number' => $employee->employee_number, 'job_title' => $employee->job_title, 'employment_from' => $row['window']['from']->toDateString(), 'employment_to' => $row['window']['to']->toDateString(), 'payable_days' => $calc['payable_days'], 'period_days' => $calc['period_days'], 'salary_term_segments' => $row['segments'], 'nssa_eligibility_basis' => $row['nssa_eligibility_basis'], 'tax_method' => $row['tax_method'], 'tax_credit_claimed' => $row['tax_credit_claimed'], 'cumulative_paye_before_credits' => $row['cumulative_paye_before_credits'], 'cumulative_tax_credit_applied' => $row['cumulative_tax_credit_applied'], 'monthly_salary' => $term->monthly_salary, 'prorated_monthly' => $row['prorated'], 'monthly_recurring_cash_earnings' => $term->monthly_recurring_cash_earnings, 'monthly_taxable_benefits' => $term->monthly_taxable_benefits, 'monthly_allowable_deductions' => $term->monthly_allowable_deductions, 'monthly_tax_credits' => $term->monthly_tax_credits, 'monthly_cash_deductions' => $term->monthly_cash_deductions, 'cash_deductions' => $calc['cash_deductions'], 'cash_earnings' => $calc['cash_earnings'], 'adjustments' => $row['adjustments'], 'paye_before_credits' => $calc['paye_before_credits'], 'tax_credit' => $calc['tax_credit'], 'employer_cost' => $calc['employer_cost']], ...collect($calc)->only('gross_salary', 'taxable_income', 'paye', 'aids_levy', 'nssa_employee', 'nssa_employer', 'net_pay')->all()]);
+                PayrollRunLine::create(['payroll_run_id' => $run->id, 'employee_id' => $employee->id, 'branch_id' => $employee->branch_id, 'snapshot' => ['employee' => $employee->preferred_name ?: $employee->legal_name, 'employee_number' => $employee->employee_number, 'job_title' => $employee->job_title, 'employment_from' => $row['window']['from']->toDateString(), 'employment_to' => $row['window']['to']->toDateString(), 'payable_days' => $calc['payable_days'], 'period_days' => $calc['period_days'], 'salary_term_segments' => $row['segments'], 'nssa_eligibility_basis' => $row['nssa_eligibility_basis'], 'apwcs_eligibility_basis' => $row['apwcs_eligibility_basis'], 'apwcs_industry_code' => $rule->apwcs_industry_code, 'apwcs_employer_rate' => $rule->apwcs_employer_rate, 'tax_method' => $row['tax_method'], 'tax_credit_claimed' => $row['tax_credit_claimed'], 'cumulative_paye_before_credits' => $row['cumulative_paye_before_credits'], 'cumulative_tax_credit_applied' => $row['cumulative_tax_credit_applied'], 'monthly_salary' => $term->monthly_salary, 'prorated_monthly' => $row['prorated'], 'monthly_recurring_cash_earnings' => $term->monthly_recurring_cash_earnings, 'monthly_taxable_benefits' => $term->monthly_taxable_benefits, 'monthly_allowable_deductions' => $term->monthly_allowable_deductions, 'monthly_tax_credits' => $term->monthly_tax_credits, 'monthly_cash_deductions' => $term->monthly_cash_deductions, 'cash_deductions' => $calc['cash_deductions'], 'cash_earnings' => $calc['cash_earnings'], 'adjustments' => $row['adjustments'], 'paye_before_credits' => $calc['paye_before_credits'], 'tax_credit' => $calc['tax_credit'], 'employer_cost' => $calc['employer_cost']], ...collect($calc)->only('gross_salary', 'taxable_income', 'paye', 'aids_levy', 'nssa_employee', 'nssa_employer', 'apwcs_employer', 'net_pay')->all()]);
             }
             Audit::record('payroll.run.drafted', (string) $run->id, ['period' => $data['period'], 'currency' => $data['currency'], 'branch_id' => $data['branch_id'], 'employees' => count($calculations), 'rule_set_id' => $rule->id]);
             return $run->load('lines');
@@ -561,6 +575,8 @@ class PayrollController
             $nssaEligible = (bool) ($eligibilityFlags[0] ?? false);
             $nssaStatus = $this->nssaPobsStatus($employee, $nssaEligible, $periodEnd);
             $nssaAgeEligible = $nssaStatus['eligible'];
+            $apwcsStatus = $this->apwcsStatus($employee, $periodEnd);
+            if ($apwcsStatus['eligible'] && $usdRule->apwcs_employer_rate === null) throw ValidationException::withMessages(['rules' => 'Mixed payroll requires the employer’s NSSA APWCS industry code, assigned premium rate and source in the approved USD rule.']);
 
             $adjustments = $adjustmentsByEmployee->get($employee->id, collect())->values()->map(fn ($item) => ['kind' => $item['kind'], 'currency' => $item['currency'], 'description' => $item['description'], 'amount' => PosMath::money((string) $item['amount'])])->all();
             $adjustmentSums = ['USD' => [], 'ZWG' => []];
@@ -626,6 +642,12 @@ class PayrollController
                 $nssa['USD'][$party] = $usdShare;
                 $nssa['ZWG'][$party] = $zwgShareUsd->dividedBy($zwgFx['usd_per_unit'], 2, \Brick\Math\RoundingMode::HalfUp);
             }
+            $apwcs = [];
+            foreach (['USD', 'ZWG'] as $code) {
+                $basicEarnings = $native[$code]['monthly_salary']->toScale(2, \Brick\Math\RoundingMode::HalfUp);
+                $rate = (string) ($usdRule->apwcs_employer_rate ?? '0');
+                $apwcs[$code] = $apwcsStatus['eligible'] ? $basicEarnings->multipliedBy($rate)->dividedBy('100', 2, \Brick\Math\RoundingMode::HalfUp)->toScale(2, \Brick\Math\RoundingMode::HalfUp) : BigDecimal::zero();
+            }
             $net = [];
             foreach (['USD', 'ZWG'] as $code) {
                 $gross = $native[$code]['monthly_salary']->plus($native[$code]['monthly_recurring_cash_earnings'])->toScale(2, \Brick\Math\RoundingMode::HalfUp);
@@ -633,7 +655,7 @@ class PayrollController
                 $net[$code] = $gross->minus($allocations[$code]['paye'])->minus($allocations[$code]['aids_levy'])->minus($nssa[$code]['employee'])->minus($cashWithheld)->toScale(2, \Brick\Math\RoundingMode::HalfUp);
                 if ($net[$code]->isNegative()) throw ValidationException::withMessages(['salary' => 'Deductions exceed '.$code.' cash pay for '.$employee->employee_number.'.']);
             }
-            $calculations[] = ['employee' => $employee, 'native' => $native, 'adjustments' => $adjustments, 'salary_segments' => $salarySegments, 'payable_days' => $payableDays, 'period_days' => $periodStart->daysInMonth, 'taxable_usd_by_currency' => $taxableUsdByCurrency, 'taxable_usd' => $taxableUsd, 'cash_usd' => $cashUsd, 'tax' => $taxCalc, 'allocations' => $allocations, 'nssa' => $nssa, 'net' => $net, 'nssa_eligibility_basis' => $nssaStatus['basis']];
+            $calculations[] = ['employee' => $employee, 'native' => $native, 'adjustments' => $adjustments, 'salary_segments' => $salarySegments, 'payable_days' => $payableDays, 'period_days' => $periodStart->daysInMonth, 'taxable_usd_by_currency' => $taxableUsdByCurrency, 'taxable_usd' => $taxableUsd, 'cash_usd' => $cashUsd, 'tax' => $taxCalc, 'allocations' => $allocations, 'nssa' => $nssa, 'apwcs' => $apwcs, 'net' => $net, 'nssa_eligibility_basis' => $nssaStatus['basis'], 'apwcs_eligibility_basis' => $apwcsStatus['basis']];
         }
         if ($partial) throw ValidationException::withMessages(['employees' => 'Mixed-currency payroll requires continuous USD and ZWG salary-term coverage for every employed day. Review the listed employees and currencies: '.implode(', ', array_unique($partial)).'.']);
 
@@ -646,9 +668,10 @@ class PayrollController
             'paye' => $sum(fn ($r) => $r['tax']['paye']), 'aids_levy' => $sum(fn ($r) => $r['tax']['aids_levy']),
             'nssa_employee' => $sum(fn ($r) => $r['nssa']['USD']['employee']->plus($usdValue('ZWG', $r['nssa']['ZWG']['employee']))),
             'nssa_employer' => $sum(fn ($r) => $r['nssa']['USD']['employer']->plus($usdValue('ZWG', $r['nssa']['ZWG']['employer']))),
+            'apwcs_employer' => $sum(fn ($r) => $r['apwcs']['USD']->plus($usdValue('ZWG', $r['apwcs']['ZWG']))),
             'cash_deductions' => $sum(fn ($r) => $r['native']['USD']['monthly_cash_deductions']->plus($r['native']['USD']['monthly_allowable_deductions'])->plus($usdValue('ZWG', $r['native']['ZWG']['monthly_cash_deductions']->plus($r['native']['ZWG']['monthly_allowable_deductions'])))),
             'net_pay' => $sum(fn ($r) => $r['net']['USD']->plus($usdValue('ZWG', $r['net']['ZWG']))),
-            'employer_cost' => $sum(fn ($r) => $r['cash_usd']->plus($r['nssa']['USD']['employer'])->plus($usdValue('ZWG', $r['nssa']['ZWG']['employer']))),
+            'employer_cost' => $sum(fn ($r) => $r['cash_usd']->plus($r['nssa']['USD']['employer'])->plus($usdValue('ZWG', $r['nssa']['ZWG']['employer']))->plus($r['apwcs']['USD'])->plus($usdValue('ZWG', $r['apwcs']['ZWG']))),
             'currency_basis' => 'USD_equivalent',
             'net_pay_by_currency' => ['USD' => $sumCode('USD', fn ($r, $c) => $r['net'][$c]), 'ZWG' => $sumCode('ZWG', fn ($r, $c) => $r['net'][$c])],
             'paye_by_currency' => ['USD' => $sumCode('USD', fn ($r, $c) => $r['allocations'][$c]['paye']), 'ZWG' => $sumCode('ZWG', fn ($r, $c) => $r['allocations'][$c]['paye'])],
@@ -672,11 +695,13 @@ class PayrollController
                 'taxable_income' => (string) $row['taxable_usd_by_currency'][$code], 'paye' => (string) $row['allocations'][$code]['paye'],
                 'aids_levy' => (string) $row['allocations'][$code]['aids_levy'], 'nssa_employee' => (string) $row['nssa'][$code]['employee'],
                 'nssa_employer' => (string) $row['nssa'][$code]['employer'], 'other_cash_deductions' => (string) $row['native'][$code]['monthly_cash_deductions'],
+                'apwcs_insurable_earnings' => (string) $row['native'][$code]['monthly_salary'], 'apwcs_employer' => (string) $row['apwcs'][$code],
                 'cash_deductions' => (string) $row['native'][$code]['monthly_cash_deductions']->plus($row['native'][$code]['monthly_allowable_deductions']),
                 'net_pay' => (string) $row['net'][$code],
             ];
-            $snapshot = ['employee' => $row['employee']->preferred_name ?: $row['employee']->legal_name, 'employee_number' => $row['employee']->employee_number, 'job_title' => $row['employee']->job_title, 'payable_days' => $row['payable_days'], 'period_days' => $row['period_days'], 'nssa_eligibility_basis' => $row['nssa_eligibility_basis'], 'tax_method' => $row['tax']['tax_method'], 'tax_credit_claimed' => $row['tax']['tax_credit_claimed'], 'cumulative_paye_before_credits' => $row['tax']['cumulative_paye_before_credits'] ?? null, 'cumulative_tax_credit_applied' => $row['tax']['cumulative_tax_credit_applied'] ?? null, 'currency_basis' => 'USD_equivalent', 'currency_breakdown' => $breakdown, 'mixed_currency_fx' => ['payment_date' => $paymentDate, 'USD' => $usdFx, 'ZWG' => $zwgFx], 'paye_before_credits' => $row['tax']['paye_before_credits'], 'tax_credit' => $row['tax']['tax_credit'], 'cash_deductions' => (string) $deductionsUsd, 'adjustments' => $row['adjustments'], 'salary_term_segments' => array_merge($row['salary_segments']['USD'], $row['salary_segments']['ZWG'])];
-            PayrollRunLine::create(['payroll_run_id' => $run->id, 'employee_id' => $row['employee']->id, 'branch_id' => $row['employee']->branch_id, 'snapshot' => $snapshot, 'gross_salary' => (string) $row['cash_usd'], 'taxable_income' => (string) $row['taxable_usd'], 'paye' => $row['tax']['paye'], 'aids_levy' => $row['tax']['aids_levy'], 'nssa_employee' => (string) $nssaUsd, 'nssa_employer' => (string) $nssaEmployerUsd, 'net_pay' => (string) $row['net']['USD']->plus($usdValue('ZWG', $row['net']['ZWG']))]);
+            $apwcsUsd = $row['apwcs']['USD']->plus($usdValue('ZWG', $row['apwcs']['ZWG']));
+            $snapshot = ['employee' => $row['employee']->preferred_name ?: $row['employee']->legal_name, 'employee_number' => $row['employee']->employee_number, 'job_title' => $row['employee']->job_title, 'payable_days' => $row['payable_days'], 'period_days' => $row['period_days'], 'nssa_eligibility_basis' => $row['nssa_eligibility_basis'], 'apwcs_eligibility_basis' => $row['apwcs_eligibility_basis'], 'apwcs_industry_code' => $usdRule->apwcs_industry_code, 'apwcs_employer_rate' => $usdRule->apwcs_employer_rate, 'tax_method' => $row['tax']['tax_method'], 'tax_credit_claimed' => $row['tax']['tax_credit_claimed'], 'cumulative_paye_before_credits' => $row['tax']['cumulative_paye_before_credits'] ?? null, 'cumulative_tax_credit_applied' => $row['tax']['cumulative_tax_credit_applied'] ?? null, 'currency_basis' => 'USD_equivalent', 'currency_breakdown' => $breakdown, 'mixed_currency_fx' => ['payment_date' => $paymentDate, 'USD' => $usdFx, 'ZWG' => $zwgFx], 'paye_before_credits' => $row['tax']['paye_before_credits'], 'tax_credit' => $row['tax']['tax_credit'], 'cash_deductions' => (string) $deductionsUsd, 'adjustments' => $row['adjustments'], 'salary_term_segments' => array_merge($row['salary_segments']['USD'], $row['salary_segments']['ZWG'])];
+            PayrollRunLine::create(['payroll_run_id' => $run->id, 'employee_id' => $row['employee']->id, 'branch_id' => $row['employee']->branch_id, 'snapshot' => $snapshot, 'gross_salary' => (string) $row['cash_usd'], 'taxable_income' => (string) $row['taxable_usd'], 'paye' => $row['tax']['paye'], 'aids_levy' => $row['tax']['aids_levy'], 'nssa_employee' => (string) $nssaUsd, 'nssa_employer' => (string) $nssaEmployerUsd, 'apwcs_employer' => (string) $apwcsUsd, 'net_pay' => (string) $row['net']['USD']->plus($usdValue('ZWG', $row['net']['ZWG']))]);
         }
         Audit::record('payroll.run.drafted', (string) $run->id, ['period' => $periodStart->format('Y-m'), 'currency' => 'MIXED', 'branch_id' => $data['branch_id'], 'employees' => count($calculations), 'rule_set_id' => $usdRule->id, 'payment_date' => $paymentDate, 'exchange_rate_ids' => [$zwgFx['exchange_rate_id']]]);
         return $run->load('lines');
@@ -729,6 +754,7 @@ class PayrollController
             }
             $grossBase = $toBase($run->totals['gross_salary']);
             $employerNssaBase = $toBase($run->totals['nssa_employer']);
+            $employerApwcsBase = $toBase($run->totals['apwcs_employer'] ?? '0');
             $payeBase = $toBase($run->totals['paye']);
             $levyBase = $toBase($run->totals['aids_levy']);
             $taxLiabilityBase = $payeBase->plus($levyBase)->toScale(4, \Brick\Math\RoundingMode::HalfUp);
@@ -744,12 +770,12 @@ class PayrollController
                 'description' => 'Monthly payroll '.$run->period_start->format('F Y'), 'cashflow' => 'none',
                 'lines' => [
                     $ledger->line('payroll_expense', (string) $grossBase, '0', 'Gross wages'.($mixed ? ' (base currency equivalent)' : '')),
-                    $ledger->line('payroll_nssa_expense', (string) $employerNssaBase, '0', 'Employer NSSA'.($mixed ? ' (base currency equivalent)' : '')),
+                    $ledger->line('payroll_nssa_expense', (string) $employerNssaBase->plus($employerApwcsBase), '0', 'Employer NSSA POBS and APWCS'.($mixed ? ' (base currency equivalent)' : '')),
                     $ledger->line('payroll_net_payable', '0', (string) $netPayBase, 'Net wages payable'.($mixed ? ' (base currency equivalent)' : '')),
                     $taxLiabilityBase->isNegative()
                         ? $ledger->line('payroll_paye_payable', (string) $taxLiabilityBase->abs(), '0', 'FDS PAYE/AIDS levy refund due'.($mixed ? ' (base currency equivalent)' : ''))
                         : $ledger->line('payroll_paye_payable', '0', (string) $taxLiabilityBase, 'PAYE and AIDS levy payable'.($mixed ? ' (base currency equivalent)' : '')),
-                    $ledger->line('payroll_nssa_payable', '0', (string) $employeeNssaBase->plus($employerNssaBase), 'NSSA contributions payable'.($mixed ? ' (base currency equivalent)' : '')),
+                    $ledger->line('payroll_nssa_payable', '0', (string) $employeeNssaBase->plus($employerNssaBase)->plus($employerApwcsBase), 'NSSA POBS and APWCS contributions payable'.($mixed ? ' (base currency equivalent)' : '')),
                     $ledger->line('payroll_other_deductions', '0', (string) $otherDeductionsBase, 'Other payroll deductions payable'.($mixed ? ' (base currency equivalent)' : '')),
                 ],
             ]);
@@ -909,11 +935,11 @@ class PayrollController
         Audit::record('payroll.run.register_exported', (string) $run->id, ['period_start' => $run->period_start->toDateString(), 'currency' => $run->currency, 'row_count' => $run->lines->count()]);
         return response()->streamDownload(function () use ($run) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['Employee number', 'Employee', 'Role', 'Currency', 'Amount basis', 'Payable days', 'Period days', 'Gross wages', 'Recurring cash earnings', 'Taxable benefits', 'Allowable deductions', 'Taxable income', 'PAYE before credits', 'Tax credit', 'PAYE', 'AIDS levy', 'NSSA employee', 'NSSA employer', 'NSSA eligibility basis', 'Other cash deductions', 'Net pay', 'Employer cost', 'Salary term segments', 'One-off adjustments', 'Native currency breakdown']);
+            fputcsv($out, ['Employee number', 'Employee', 'Role', 'Currency', 'Amount basis', 'Payable days', 'Period days', 'Gross wages', 'Recurring cash earnings', 'Taxable benefits', 'Allowable deductions', 'Taxable income', 'PAYE before credits', 'Tax credit', 'PAYE', 'AIDS levy', 'NSSA POBS employee', 'NSSA POBS employer', 'APWCS employer', 'APWCS industry code', 'NSSA eligibility basis', 'Other cash deductions', 'Net pay', 'Employer cost', 'Salary term segments', 'One-off adjustments', 'Native currency breakdown']);
             foreach ($run->lines as $line) {
                 $s = $line->snapshot;
                 $prorated = $s['prorated_monthly'] ?? [];
-                fputcsv($out, [$this->csvText($s['employee_number'] ?? ''), $this->csvText($s['employee'] ?? ''), $this->csvText($s['job_title'] ?? ''), $run->currency, $run->currency === 'MIXED' ? 'USD equivalent' : $run->currency, $s['payable_days'] ?? '', $s['period_days'] ?? '', $line->gross_salary, $prorated['monthly_recurring_cash_earnings'] ?? $s['monthly_recurring_cash_earnings'] ?? '0', $prorated['monthly_taxable_benefits'] ?? $s['monthly_taxable_benefits'] ?? '0', $prorated['monthly_allowable_deductions'] ?? $s['monthly_allowable_deductions'] ?? '0', $line->taxable_income, $s['paye_before_credits'] ?? '0', $s['tax_credit'] ?? '0', $line->paye, $line->aids_levy, $line->nssa_employee, $line->nssa_employer, $this->csvText($s['nssa_eligibility_basis'] ?? ''), $s['cash_deductions'] ?? $s['monthly_cash_deductions'] ?? '0', $line->net_pay, $s['employer_cost'] ?? '0', $this->csvText(json_encode($s['salary_term_segments'] ?? [], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)), $this->csvText(json_encode($s['adjustments'] ?? [], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)), $this->csvText(json_encode($s['currency_breakdown'] ?? [], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR))]);
+                fputcsv($out, [$this->csvText($s['employee_number'] ?? ''), $this->csvText($s['employee'] ?? ''), $this->csvText($s['job_title'] ?? ''), $run->currency, $run->currency === 'MIXED' ? 'USD equivalent' : $run->currency, $s['payable_days'] ?? '', $s['period_days'] ?? '', $line->gross_salary, $prorated['monthly_recurring_cash_earnings'] ?? $s['monthly_recurring_cash_earnings'] ?? '0', $prorated['monthly_taxable_benefits'] ?? $s['monthly_taxable_benefits'] ?? '0', $prorated['monthly_allowable_deductions'] ?? $s['monthly_allowable_deductions'] ?? '0', $line->taxable_income, $s['paye_before_credits'] ?? '0', $s['tax_credit'] ?? '0', $line->paye, $line->aids_levy, $line->nssa_employee, $line->nssa_employer, $line->apwcs_employer, $this->csvText($s['apwcs_industry_code'] ?? ''), $this->csvText($s['nssa_eligibility_basis'] ?? ''), $s['cash_deductions'] ?? $s['monthly_cash_deductions'] ?? '0', $line->net_pay, $s['employer_cost'] ?? '0', $this->csvText(json_encode($s['salary_term_segments'] ?? [], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)), $this->csvText(json_encode($s['adjustments'] ?? [], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)), $this->csvText(json_encode($s['currency_breakdown'] ?? [], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR))]);
             }
             fclose($out);
         }, 'payroll-register-'.$run->period_start->format('Y-m').'-'.$run->currency.'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
@@ -930,17 +956,17 @@ class PayrollController
         $totals = [];
         foreach ($runs as $run) foreach ($run->lines as $line) {
             $key = $line->employee_id.':'.$run->currency;
-            $totals[$key] ??= ['employee_number' => $line->snapshot['employee_number'] ?? '', 'employee' => $line->snapshot['employee'] ?? '', 'currency' => $run->currency, 'periods' => 0, 'gross_salary' => '0', 'taxable_income' => '0', 'tax_credits' => '0', 'paye' => '0', 'aids_levy' => '0', 'nssa_employee' => '0', 'nssa_employer' => '0', 'cash_deductions' => '0', 'net_pay' => '0'];
+            $totals[$key] ??= ['employee_number' => $line->snapshot['employee_number'] ?? '', 'employee' => $line->snapshot['employee'] ?? '', 'currency' => $run->currency, 'periods' => 0, 'gross_salary' => '0', 'taxable_income' => '0', 'tax_credits' => '0', 'paye' => '0', 'aids_levy' => '0', 'nssa_employee' => '0', 'nssa_employer' => '0', 'apwcs_employer' => '0', 'cash_deductions' => '0', 'net_pay' => '0'];
             $totals[$key]['periods']++;
-            foreach (['gross_salary', 'taxable_income', 'paye', 'aids_levy', 'nssa_employee', 'nssa_employer', 'net_pay'] as $field) $totals[$key][$field] = PosMath::sum([$totals[$key][$field], $line->$field], 2);
+            foreach (['gross_salary', 'taxable_income', 'paye', 'aids_levy', 'nssa_employee', 'nssa_employer', 'apwcs_employer', 'net_pay'] as $field) $totals[$key][$field] = PosMath::sum([$totals[$key][$field], $line->$field], 2);
             $totals[$key]['tax_credits'] = PosMath::sum([$totals[$key]['tax_credits'], $line->snapshot['tax_credit'] ?? '0'], 2);
             $totals[$key]['cash_deductions'] = PosMath::sum([$totals[$key]['cash_deductions'], $line->snapshot['cash_deductions'] ?? $line->snapshot['monthly_cash_deductions'] ?? '0'], 2);
         }
         Audit::record('payroll.ytd_exported', (string) $data['year'], ['row_count' => count($totals)]);
         return response()->streamDownload(function () use ($totals) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['Employee number', 'Employee', 'Currency', 'Amount basis', 'Payroll periods', 'Gross wages YTD', 'Taxable income YTD', 'Tax credits YTD', 'PAYE YTD', 'AIDS levy YTD', 'NSSA employee YTD', 'NSSA employer YTD', 'Cash deductions YTD', 'Net pay YTD']);
-            foreach ($totals as $row) fputcsv($out, [$this->csvText($row['employee_number']), $this->csvText($row['employee']), $row['currency'], $row['currency'] === 'MIXED' ? 'USD equivalent' : $row['currency'], $row['periods'], $row['gross_salary'], $row['taxable_income'], $row['tax_credits'], $row['paye'], $row['aids_levy'], $row['nssa_employee'], $row['nssa_employer'], $row['cash_deductions'], $row['net_pay']]);
+            fputcsv($out, ['Employee number', 'Employee', 'Currency', 'Amount basis', 'Payroll periods', 'Gross wages YTD', 'Taxable income YTD', 'Tax credits YTD', 'PAYE YTD', 'AIDS levy YTD', 'NSSA POBS employee YTD', 'NSSA POBS employer YTD', 'APWCS employer YTD', 'Cash deductions YTD', 'Net pay YTD']);
+            foreach ($totals as $row) fputcsv($out, [$this->csvText($row['employee_number']), $this->csvText($row['employee']), $row['currency'], $row['currency'] === 'MIXED' ? 'USD equivalent' : $row['currency'], $row['periods'], $row['gross_salary'], $row['taxable_income'], $row['tax_credits'], $row['paye'], $row['aids_levy'], $row['nssa_employee'], $row['nssa_employer'], $row['apwcs_employer'], $row['cash_deductions'], $row['net_pay']]);
             fclose($out);
         }, 'payroll-ytd-'.$data['year'].'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }

@@ -12,6 +12,7 @@ use App\Models\PayrollRun;
 use App\Models\Tenant;
 use App\Models\TenantModule;
 use App\Services\Audit;
+use App\Services\PosMath;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -125,15 +126,18 @@ class HrController
                 $part = $run->currency === 'MIXED' ? ($breakdown[$currency] ?? []) : [];
                 $employeeNssa = $run->currency === 'MIXED' ? ($part['nssa_employee'] ?? '0') : (string) $line->nssa_employee;
                 $employerNssa = $run->currency === 'MIXED' ? ($part['nssa_employer'] ?? '0') : (string) $line->nssa_employer;
-                if (BigDecimal::of($employeeNssa)->isZero() && BigDecimal::of($employerNssa)->isZero()) continue;
-                $rows[] = [$this->csvText($branchNames[$run->branch_id] ?? ''), $data['period'], $this->csvText($employee->nssa_number), $this->csvText($employee->national_id_number), $this->csvText($line->snapshot['employee'] ?? $employee->legal_name), $employee->date_of_birth?->toDateString() ?? '', $employee->start_date?->toDateString() ?? '', $employee->end_date?->toDateString() ?? '', $currency, $run->currency === 'MIXED' ? ($part['gross_cash'] ?? '0') : (string) $line->gross_salary, $employeeNssa, $employerNssa, $employee->employment_category ?? ''];
+                $apwcsInsurable = $run->currency === 'MIXED' ? ($part['apwcs_insurable_earnings'] ?? '0') : ($line->snapshot['prorated_monthly']['monthly_salary'] ?? $line->snapshot['monthly_salary'] ?? '0');
+                $apwcsPremium = $run->currency === 'MIXED' ? ($part['apwcs_employer'] ?? '0') : (string) $line->apwcs_employer;
+                if (BigDecimal::of($employeeNssa)->isZero() && BigDecimal::of($employerNssa)->isZero() && BigDecimal::of($apwcsPremium)->isZero()) continue;
+                $pobsInsurable = $run->currency === 'MIXED' ? ($part['gross_cash'] ?? '0') : (string) $line->gross_salary;
+                $rows[] = [$this->csvText($branchNames[$run->branch_id] ?? ''), $data['period'], $this->csvText($employee->nssa_number), $this->csvText($employee->national_id_number), $this->csvText($line->snapshot['employee'] ?? $employee->legal_name), $employee->date_of_birth?->toDateString() ?? '', $employee->start_date?->toDateString() ?? '', $employee->end_date?->toDateString() ?? '', $currency, $pobsInsurable, $employeeNssa, $employerNssa, $apwcsInsurable, $line->snapshot['apwcs_industry_code'] ?? '', $line->snapshot['apwcs_employer_rate'] ?? '', $apwcsPremium, PosMath::sum([$employeeNssa, $employerNssa, $apwcsPremium], 2), $employee->employment_category ?? ''];
             }
         }
         Audit::record('hr.nssa_p4_workpaper_exported', $data['period'], ['row_count' => count($rows)]);
         return response()->streamDownload(function () use ($rows, $data) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['NSSA P4 monthly contribution workpaper', $data['period'], 'Reconcile with the NSSA portal P4 and P4A; this file is not an electronic filing']);
-            fputcsv($out, ['Branch', 'Contribution month', 'NSSA number', 'National ID', 'Employee', 'Date of birth', 'Employment start', 'Employment end', 'Currency', 'Cash earnings', 'Employee contribution', 'Employer contribution', 'Employment category']);
+            fputcsv($out, ['NSSA monthly contribution workpaper', $data['period'], 'Reconcile the POBS and APWCS calculations with the NSSA portal inspection/P4/P4A; this file is not an electronic filing. Arrears, payments, penalties and surcharges are excluded.']);
+            fputcsv($out, ['Branch', 'Contribution month', 'NSSA number', 'National ID', 'Employee', 'Date of birth', 'Employment start', 'Employment end', 'Currency', 'POBS insurable earnings', 'POBS employee contribution', 'POBS employer contribution', 'APWCS insurable earnings', 'NSSA industry code', 'APWCS employer rate (%)', 'APWCS employer premium', 'Current-period NSSA total due', 'Employment category']);
             foreach ($rows as $row) fputcsv($out, $row);
             fclose($out);
         }, 'nssa-p4-workpaper-'.$data['period'].'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);

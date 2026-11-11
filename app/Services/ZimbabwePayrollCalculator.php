@@ -53,6 +53,7 @@ final class ZimbabwePayrollCalculator
         $levy = $paye->multipliedBy((string) $rule->aids_levy_rate)->dividedBy('100', 2, RoundingMode::HALF_UP)->toScale(2, RoundingMode::HALF_UP);
         $nssaEmployee = BigDecimal::zero();
         $nssaEmployer = BigDecimal::zero();
+        $apwcsEmployer = BigDecimal::zero();
         if ($term['nssa_eligible']) {
             if ($rule->nssa_employee_rate === null || $rule->nssa_employer_rate === null) throw ValidationException::withMessages(['rules' => 'NSSA is marked applicable for this employee, but the approved rule set has no NSSA rates.']);
             if ($rule->nssa_ceiling !== null && $rule->nssa_ceiling_currency !== $rule->currency) throw ValidationException::withMessages(['rules' => 'The NSSA earnings ceiling currency differs from the payroll currency; no cross-currency conversion is available.']);
@@ -60,6 +61,10 @@ final class ZimbabwePayrollCalculator
             $insurable = $ceiling === null || $grossCash->isLessThanOrEqualTo($ceiling) ? $grossCash : $ceiling;
             $nssaEmployee = $insurable->multipliedBy((string) $rule->nssa_employee_rate)->dividedBy('100', 2, RoundingMode::HALF_UP)->toScale(2, RoundingMode::HALF_UP);
             $nssaEmployer = $insurable->multipliedBy((string) $rule->nssa_employer_rate)->dividedBy('100', 2, RoundingMode::HALF_UP)->toScale(2, RoundingMode::HALF_UP);
+        }
+        if ($term['apwcs_eligible'] ?? false) {
+            if ($rule->apwcs_employer_rate === null) throw ValidationException::withMessages(['rules' => 'APWCS applies to this employee, but the approved rule set has no employer industry rate. Add the NSSA-assigned rate and source before calculating payroll.']);
+            $apwcsEmployer = $salary->multipliedBy((string) $rule->apwcs_employer_rate)->dividedBy('100', 2, RoundingMode::HalfUp)->toScale(2, RoundingMode::HalfUp);
         }
         $net = $grossCash->minus($paye)->minus($levy)->minus($nssaEmployee)->minus($cashDeductions)->toScale(2, RoundingMode::HALF_UP);
         if ($net->isNegative()) throw ValidationException::withMessages(['salary' => 'Payroll deductions exceed cash salary for '.$term['employee_number'].'.']);
@@ -77,8 +82,9 @@ final class ZimbabwePayrollCalculator
             'aids_levy' => (string) $levy,
             'nssa_employee' => (string) $nssaEmployee,
             'nssa_employer' => (string) $nssaEmployer,
+            'apwcs_employer' => (string) $apwcsEmployer,
             'net_pay' => (string) $net,
-            'employer_cost' => (string) $grossCash->plus($nssaEmployer)->toScale(2),
+            'employer_cost' => (string) $grossCash->plus($nssaEmployer)->plus($apwcsEmployer)->toScale(2),
         ];
     }
 }
