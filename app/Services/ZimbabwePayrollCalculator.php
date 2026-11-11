@@ -22,6 +22,7 @@ final class ZimbabwePayrollCalculator
         $allowable = $this->money($term['monthly_allowable_deductions']);
         $credit = $this->money($term['monthly_tax_credits']);
         $cashDeductions = $this->money($term['monthly_cash_deductions']);
+        $employerMedicalAid = $this->money($term['employer_medical_aid_contribution'] ?? '0');
         $payableDays = (int) ($term['payable_days'] ?? 0);
         $periodDays = (int) ($term['period_days'] ?? 0);
         if ($payableDays < 1 || $periodDays < 1 || $payableDays > $periodDays) {
@@ -32,7 +33,8 @@ final class ZimbabwePayrollCalculator
             throw ValidationException::withMessages(['rules' => 'This run includes a partial employment period or salary change. Approve a calendar-day policy and sourced daily PAYE bands before calculating it.']);
         }
         $grossCash = $salary->plus($cashEarnings)->toScale(2, RoundingMode::HALF_UP);
-        $taxableBeforeFloor = $grossCash->plus($benefits)->minus($allowable);
+        $taxExemption = $this->money($term['tax_exempt_income'] ?? '0');
+        $taxableBeforeFloor = $grossCash->plus($benefits)->minus($allowable)->minus($taxExemption);
         $taxable = ($taxableBeforeFloor->isNegative() ? BigDecimal::zero() : $taxableBeforeFloor)->toScale(2, RoundingMode::HALF_UP);
         $basicTax = null;
         $taxBands = $dailyTaxBasis ? $rule->daily_paye_bands : $rule->paye_bands;
@@ -84,7 +86,7 @@ final class ZimbabwePayrollCalculator
             'nssa_employer' => (string) $nssaEmployer,
             'apwcs_employer' => (string) $apwcsEmployer,
             'net_pay' => (string) $net,
-            'employer_cost' => (string) $grossCash->plus($nssaEmployer)->plus($apwcsEmployer)->toScale(2),
+            'employer_cost' => (string) $grossCash->plus($nssaEmployer)->plus($apwcsEmployer)->plus($employerMedicalAid)->toScale(2),
         ];
     }
 }

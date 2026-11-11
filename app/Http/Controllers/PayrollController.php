@@ -15,6 +15,10 @@ use App\Models\PayrollRunLine;
 use App\Models\PayrollRunPosting;
 use App\Models\PostingLink;
 use App\Models\PayrollPayslipDelivery;
+use App\Models\PayrollHead;
+use App\Models\MedicalAidProvider;
+use App\Models\LeaveRequest;
+use App\Models\LeaveType;
 use App\Models\Tenant;
 use App\Models\TenantModule;
 use App\Services\Audit;
@@ -99,6 +103,35 @@ class PayrollController
         $thisMonth = isset($priorByMonth[$currentMonthKey]) ? BigDecimal::zero()->toScale(4) : $calculatedThisMonth;
         $cumulative = BigDecimal::of(PosMath::sum([...array_values($priorByMonth), (string) $thisMonth], 4));
         return ['annual_leave_entitlement_days' => (string) $annualDays->toScale(2), 'annual_leave_accrual_days' => (string) $thisMonth, 'annual_leave_cumulative_accrued_days' => (string) $cumulative];
+    }
+
+    private function annualLeavePaidOut(Employee $employee, int $year, ?int $excludeRunId = null, ?CarbonImmutable $through = null): float
+    {
+        $runs = PayrollRun::with(['lines', 'postings'])->where('id', '!=', $excludeRunId ?? 0)->where('status', 'approved')->whereYear('period_start', $year)->whereHas('lines', fn ($query) => $query->where('employee_id', $employee->id));
+        if ($through) $runs->whereDate('period_start', '<=', $through->toDateString());
+        return (float) $runs->get()
+            ->filter(fn ($run) => ! $run->postings->contains('kind', 'reversal'))
+            ->sum(fn ($run) => (float) ($run->lines->firstWhere('employee_id', $employee->id)?->snapshot['annual_leave_paid_out_days'] ?? 0));
+    }
+
+    private function annualLeaveUsed(Employee $employee, int $year): float
+    {
+        $leaveType = LeaveType::whereRaw('lower(trim(name)) = ?', ['annual leave'])->first();
+        if (! $leaveType) throw ValidationException::withMessages(['leave' => 'Create an active Annual Leave type in People & HR before processing leave cash-outs.']);
+        return (float) LeaveRequest::where('employee_id', $employee->id)->where('leave_type_id', $leaveType->id)->where('status', 'approved')->whereYear('start_date', $year)->sum('days');
+    }
+
+    private function annualBonusAlreadyPaid(Employee $employee, int $year, string $currency, CarbonImmutable $through, ?int $excludeRunId = null): string
+    {
+        $runs = PayrollRun::with(['lines', 'postings'])->where('id', '!=', $excludeRunId ?? 0)->where('status', 'approved')->whereYear('period_start', $year)->whereDate('period_start', '<=', $through->toDateString())->whereHas('lines', fn ($query) => $query->where('employee_id', $employee->id))->get()->filter(fn ($run) => ! $run->postings->contains('kind', 'reversal'));
+        $amounts = [];
+        foreach ($runs as $run) foreach ($run->lines->where('employee_id', $employee->id) as $line) foreach ($line->snapshot['adjustments'] ?? [] as $adjustment) {
+            if (($adjustment['kind'] ?? null) !== 'bonus') continue;
+            if ($run->currency !== 'MIXED' && $run->currency !== $currency) throw ValidationException::withMessages(['period' => 'Prior bonus history for '.$employee->employee_number.' uses another currency and cannot be reconciled to this exemption limit. Reconcile annual bonus history before calculating.']);
+            if ($run->currency === 'MIXED' && ($adjustment['currency'] ?? null) !== $currency) throw ValidationException::withMessages(['period' => 'Prior mixed-currency bonus history for '.$employee->employee_number.' uses another currency and cannot be reconciled to this exemption limit.']);
+            $amounts[] = $adjustment['amount'];
+        }
+        return PosMath::sum($amounts ?: ['0'], 2);
     }
 
     private function taxYearContext(Employee $employee, CarbonImmutable $periodStart, string $currency): array
@@ -213,7 +246,7 @@ class PayrollController
         $visibleEmployees = $this->employeeQuery($request)->orderBy('employee_number')->get();
         $employees = $visibleEmployees->where('status', 'active')->values();
         $compensations = $request->user()->canDo('payroll.compensation.view')
-            ? EmployeeCompensation::whereIn('employee_id', $visibleEmployees->pluck('id'))->with('employee')->latest('effective_from')->get()->map(fn ($c) => [...$c->only('id', 'currency', 'monthly_salary', 'monthly_recurring_cash_earnings', 'monthly_taxable_benefits', 'monthly_allowable_deductions', 'monthly_tax_credits', 'monthly_cash_deductions', 'nssa_eligible', 'effective_from', 'effective_to'), 'employee' => $c->employee?->legal_name, 'employee_number' => $c->employee?->employee_number])
+            ? EmployeeCompensation::whereIn('employee_id', $visibleEmployees->pluck('id'))->with(['employee', 'medicalAidProvider'])->latest('effective_from')->get()->map(fn ($c) => [...$c->only('id', 'currency', 'monthly_salary', 'monthly_recurring_cash_earnings', 'monthly_taxable_benefits', 'monthly_allowable_deductions', 'monthly_tax_credits', 'monthly_cash_deductions', 'nssa_eligible', 'effective_from', 'effective_to', 'medical_aid_provider_id', 'medical_aid_member_number', 'monthly_medical_aid_employee_contribution', 'monthly_medical_aid_employer_contribution'), 'medical_aid_provider' => $c->medicalAidProvider?->name, 'employee' => $c->employee?->legal_name, 'employee_number' => $c->employee?->employee_number])
             : collect();
         $foreignBankAccounts = collect();
         if ($request->user()->canDo('payroll.runs.settle') && TenantModule::where('key', 'currencies')->where('enabled', true)->exists()) {
@@ -247,7 +280,9 @@ class PayrollController
             })
             : collect();
         return [
-            'rules' => PayrollRuleSet::orderByDesc('effective_from')->orderByDesc('id')->get()->map(fn ($r) => [...$r->only('id', 'jurisdiction', 'currency', 'frequency', 'effective_from', 'effective_to', 'paye_bands', 'daily_paye_bands', 'proration_basis', 'proration_source_name', 'proration_source_url', 'aids_levy_rate', 'nssa_employee_rate', 'nssa_employer_rate', 'nssa_ceiling', 'nssa_ceiling_currency', 'apwcs_employer_rate', 'apwcs_industry_code', 'apwcs_source_name', 'apwcs_source_url', 'source_name', 'source_url', 'nssa_source_name', 'nssa_source_url', 'status', 'approved_at'), 'can_approve' => $request->user()->canDo('payroll.rules.approve') && $r->created_by !== $request->user()->id]),
+            'rules' => PayrollRuleSet::orderByDesc('effective_from')->orderByDesc('id')->get()->map(fn ($r) => [...$r->only('id', 'jurisdiction', 'currency', 'frequency', 'effective_from', 'effective_to', 'paye_bands', 'daily_paye_bands', 'proration_basis', 'proration_source_name', 'proration_source_url', 'aids_levy_rate', 'nssa_employee_rate', 'nssa_employer_rate', 'nssa_ceiling', 'nssa_ceiling_currency', 'apwcs_employer_rate', 'apwcs_industry_code', 'apwcs_source_name', 'apwcs_source_url', 'annual_bonus_exempt_limit', 'annual_bonus_exempt_currency', 'bonus_exemption_source_name', 'bonus_exemption_source_url', 'medical_aid_credit_rate', 'medical_aid_credit_source_name', 'medical_aid_credit_source_url', 'source_name', 'source_url', 'nssa_source_name', 'nssa_source_url', 'status', 'approved_at'), 'can_approve' => $request->user()->canDo('payroll.rules.approve') && $r->created_by !== $request->user()->id]),
+            'payroll_heads' => PayrollHead::orderBy('name')->get(['id', 'code', 'name', 'kind', 'active']),
+            'medical_aid_providers' => MedicalAidProvider::orderBy('name')->get(['id', 'name', 'member_number_label', 'source_name', 'source_url', 'active']),
             'employees' => $employees->map(fn ($e) => [...$e->only('id', 'employee_number', 'legal_name', 'job_title'), 'branch_id' => $e->branch_id]),
             'compensations' => $compensations,
             'runs' => $runs,
@@ -292,7 +327,11 @@ class PayrollController
             'nssa_ceiling' => 'nullable|numeric|min:0', 'nssa_ceiling_currency' => ['nullable', 'string', Rule::in(['USD', 'ZWG'])], 'source_name' => 'required|string|max:200', 'source_url' => 'required|url|max:1000',
             'nssa_source_name' => 'nullable|string|max:200', 'nssa_source_url' => 'nullable|url|max:1000',
             'apwcs_employer_rate' => 'nullable|numeric|min:0|max:100', 'apwcs_industry_code' => 'nullable|string|max:40', 'apwcs_source_name' => 'nullable|string|max:200', 'apwcs_source_url' => 'nullable|url|max:1000',
+            'annual_bonus_exempt_limit' => 'nullable|numeric|min:0|max:999999999999', 'annual_bonus_exempt_currency' => ['nullable', 'string', Rule::in(['USD', 'ZWG'])], 'bonus_exemption_source_name' => 'nullable|string|max:200', 'bonus_exemption_source_url' => 'nullable|url|max:1000',
+            'medical_aid_credit_rate' => 'nullable|numeric|min:0|max:100', 'medical_aid_credit_source_name' => 'nullable|string|max:200', 'medical_aid_credit_source_url' => 'nullable|url|max:1000',
         ]);
+        if (($data['annual_bonus_exempt_limit'] ?? null) !== null && (empty($data['annual_bonus_exempt_currency']) || empty($data['bonus_exemption_source_name']) || empty($data['bonus_exemption_source_url']))) throw ValidationException::withMessages(['annual_bonus_exempt_limit' => 'A bonus exemption needs its currency and the official source and URL.']);
+        if (($data['medical_aid_credit_rate'] ?? null) !== null && (empty($data['medical_aid_credit_source_name']) || empty($data['medical_aid_credit_source_url']))) throw ValidationException::withMessages(['medical_aid_credit_rate' => 'A medical-aid credit rate needs its official source and URL.']);
         if (is_null($data['nssa_employee_rate'] ?? null) !== is_null($data['nssa_employer_rate'] ?? null)) {
             throw ValidationException::withMessages(['nssa_employee_rate' => 'Enter both NSSA employee and employer rates, or leave both blank.']);
         }
@@ -329,6 +368,24 @@ class PayrollController
         return $request->expectsJson() ? response()->json(['data' => $rule], 201) : back()->with('success', 'Draft payroll rules saved. A different authorized user must approve them.');
     }
 
+    public function storeHead(Request $request)
+    {
+        $this->permit($request, 'payroll.rules.manage');
+        $data = $request->validate(['code' => ['required', 'string', 'max:40', 'regex:/^[A-Z0-9_]+$/', Rule::unique('payroll_heads', 'code')->where('tenant_id', app(TenantContext::class)->requireId())], 'name' => 'required|string|max:120', 'kind' => ['required', Rule::in(['cash_earning', 'bonus', 'leave_cash_out', 'taxable_benefit', 'allowable_deduction', 'tax_credit', 'cash_deduction'])]]);
+        $head = PayrollHead::create([...$data, 'active' => true]);
+        Audit::record('payroll.head.created', (string) $head->id, ['code' => $head->code, 'kind' => $head->kind]);
+        return back()->with('success', 'Payroll head saved.');
+    }
+
+    public function storeMedicalAidProvider(Request $request)
+    {
+        $this->permit($request, 'payroll.rules.manage');
+        $data = $request->validate(['name' => ['required', 'string', 'max:160', Rule::unique('medical_aid_providers', 'name')->where('tenant_id', app(TenantContext::class)->requireId())], 'member_number_label' => 'nullable|string|max:80', 'source_name' => 'nullable|string|max:200', 'source_url' => 'nullable|url|max:1000']);
+        $provider = MedicalAidProvider::create([...$data, 'active' => true]);
+        Audit::record('payroll.medical_aid_provider.created', (string) $provider->id, ['name' => $provider->name]);
+        return back()->with('success', 'Medical aid provider saved.');
+    }
+
     public function approveRule(Request $request, int $id)
     {
         $this->permit($request, 'payroll.rules.approve');
@@ -350,7 +407,9 @@ class PayrollController
     {
         $this->permit($request, 'payroll.compensation.manage');
         $employee = $this->employeeQuery($request)->findOrFail($employeeId);
-        $data = $request->validate(['currency' => ['required', 'string', Rule::in(['USD', 'ZWG'])], 'monthly_salary' => 'required|numeric|min:0|max:999999999999', 'monthly_recurring_cash_earnings' => 'required|numeric|min:0|max:999999999999', 'monthly_taxable_benefits' => 'required|numeric|min:0|max:999999999999', 'monthly_allowable_deductions' => 'required|numeric|min:0|max:999999999999', 'monthly_tax_credits' => 'required|numeric|min:0|max:999999999999', 'monthly_cash_deductions' => 'required|numeric|min:0|max:999999999999', 'nssa_eligible' => 'required|boolean', 'effective_from' => 'required|date', 'effective_to' => 'nullable|date|after_or_equal:effective_from']);
+        $data = $request->validate(['currency' => ['required', 'string', Rule::in(['USD', 'ZWG'])], 'monthly_salary' => 'required|numeric|min:0|max:999999999999', 'monthly_recurring_cash_earnings' => 'required|numeric|min:0|max:999999999999', 'monthly_taxable_benefits' => 'required|numeric|min:0|max:999999999999', 'monthly_allowable_deductions' => 'required|numeric|min:0|max:999999999999', 'monthly_tax_credits' => 'required|numeric|min:0|max:999999999999', 'monthly_cash_deductions' => 'required|numeric|min:0|max:999999999999', 'medical_aid_provider_id' => 'nullable|integer', 'medical_aid_member_number' => 'nullable|string|max:100', 'monthly_medical_aid_employee_contribution' => 'required|numeric|min:0|max:999999999999', 'monthly_medical_aid_employer_contribution' => 'required|numeric|min:0|max:999999999999', 'nssa_eligible' => 'required|boolean', 'effective_from' => 'required|date', 'effective_to' => 'nullable|date|after_or_equal:effective_from']);
+        if (($data['monthly_medical_aid_employee_contribution'] > 0 || $data['monthly_medical_aid_employer_contribution'] > 0) && empty($data['medical_aid_provider_id'])) throw ValidationException::withMessages(['medical_aid_provider_id' => 'Select the medical aid provider for these contributions.']);
+        if (! empty($data['medical_aid_provider_id']) && ! MedicalAidProvider::where('active', true)->whereKey($data['medical_aid_provider_id'])->exists()) throw ValidationException::withMessages(['medical_aid_provider_id' => 'Select an active medical aid provider.']);
         if ($employee->status === 'terminated' || $employee->start_date->gt($data['effective_from']) || ($employee->end_date && $employee->end_date->lt($data['effective_from']))) {
             throw ValidationException::withMessages(['effective_from' => 'The salary term must begin within an active employment period.']);
         }
@@ -383,10 +442,22 @@ class PayrollController
             'currency' => ['required', 'string', Rule::in(['USD', 'ZWG', 'MIXED'])],
             'payment_date' => ['required_if:currency,MIXED', 'nullable', 'date_format:Y-m-d'],
             'adjustments' => 'sometimes|array|max:500', 'adjustments.*.employee_id' => 'required|integer',
-            'adjustments.*.kind' => ['required', Rule::in(['cash_earning', 'taxable_benefit', 'allowable_deduction', 'tax_credit', 'cash_deduction'])],
+            'adjustments.*.kind' => ['required', Rule::in(['cash_earning', 'bonus', 'leave_cash_out', 'taxable_benefit', 'allowable_deduction', 'tax_credit', 'cash_deduction'])],
+            'adjustments.*.head_id' => 'nullable|integer',
+            'adjustments.*.leave_days' => 'nullable|numeric|gt:0|max:366',
             'adjustments.*.currency' => ['required_if:currency,MIXED', 'nullable', 'string', Rule::in(['USD', 'ZWG'])],
             'adjustments.*.description' => 'required|string|max:120', 'adjustments.*.amount' => 'required|numeric|gt:0|max:999999999999',
         ]);
+        foreach ($data['adjustments'] ?? [] as $index => &$adjustment) {
+            if (! empty($adjustment['head_id'])) {
+                $head = PayrollHead::where('active', true)->find($adjustment['head_id']);
+                if (! $head) throw ValidationException::withMessages(["adjustments.$index.head_id" => 'The selected payroll head is no longer active.']);
+                $adjustment['kind'] = $head->kind;
+                $adjustment['description'] = $head->name;
+            }
+        }
+        unset($adjustment);
+        foreach ($data['adjustments'] ?? [] as $index => $adjustment) if ($adjustment['kind'] === 'leave_cash_out' && empty($adjustment['leave_days'])) throw ValidationException::withMessages(["adjustments.$index.leave_days" => 'Enter the annual leave days being paid out.']);
         $periodStart = CarbonImmutable::createFromFormat('!Y-m', $data['period'])->startOfMonth();
         $periodEnd = $periodStart->endOfMonth();
         $payloadHash = PosMath::hash(collect($data)->except('request_key')->all());
@@ -482,21 +553,43 @@ class PayrollController
                     if (count($segments) === 1 && $payableDays === $periodStart->daysInMonth) return PosMath::money((string) $segments[0]['term']->{$field});
                     return PosMath::sum(array_map(fn ($segment) => $prorate($segment['term']->{$field}, $segment['days']), $segments), 2);
                 };
-                $adjustments = $adjustmentsByEmployee->get($employee->id, collect())->values()->map(fn ($item) => ['kind' => $item['kind'], 'description' => $item['description'], 'amount' => PosMath::money((string) $item['amount'])])->all();
+                $adjustments = $adjustmentsByEmployee->get($employee->id, collect())->values()->map(fn ($item) => ['head_id' => $item['head_id'] ?? null, 'kind' => $item['kind'], 'description' => $item['description'], 'amount' => PosMath::money((string) $item['amount']), 'leave_days' => $item['leave_days'] ?? null])->all();
+                $leaveCashOutDays = (float) collect($adjustments)->where('kind', 'leave_cash_out')->sum(fn ($item) => (float) ($item['leave_days'] ?? 0));
+                if ($leaveCashOutDays > 0) {
+                    $currentLeave = $this->annualLeaveAccrual($employee, $payableDays, $periodStart->daysInMonth, $periodStart);
+                    $availableLeave = (float) $currentLeave['annual_leave_cumulative_accrued_days'] - $this->annualLeaveUsed($employee, $periodStart->year) - $this->annualLeavePaidOut($employee, $periodStart->year, null, $periodStart);
+                    if ($leaveCashOutDays - max(0, $availableLeave) > 0.0001) throw ValidationException::withMessages(['adjustments' => 'The leave cash-out exceeds accrued annual leave available for '.$employee->employee_number.'.']);
+                }
+                $bonusAmount = PosMath::sum(collect($adjustments)->where('kind', 'bonus')->pluck('amount')->all() ?: ['0'], 2);
+                $bonusExemption = '0.00';
+                if (BigDecimal::of($bonusAmount)->isPositive() && $rule->annual_bonus_exempt_limit !== null) {
+                    if ($rule->annual_bonus_exempt_currency !== $rule->currency) throw ValidationException::withMessages(['rules' => 'Bonus exemption currency must match the payroll rule currency.']);
+                    $priorBonus = BigDecimal::of($this->annualBonusAlreadyPaid($employee, $periodStart->year, $data['currency'], $periodStart));
+                    $remaining = BigDecimal::of((string) $rule->annual_bonus_exempt_limit)->minus($priorBonus);
+                    if ($remaining->isPositive()) $bonusExemption = BigDecimal::of($bonusAmount)->isLessThan($remaining) ? $bonusAmount : (string) $remaining->toScale(2, \Brick\Math\RoundingMode::HalfUp);
+                }
+                $exemptionAssigned = false;
+                foreach ($adjustments as &$adjustment) if ($adjustment['kind'] === 'bonus') { $adjustment['bonus_exempt_amount'] = $exemptionAssigned ? '0.00' : $bonusExemption; $exemptionAssigned = true; }
+                unset($adjustment);
                 $baseSalary = $sumSegmentAmount('monthly_salary');
                 $recurringCash = $sumSegmentAmount('monthly_recurring_cash_earnings');
                 $taxableBenefits = $sumSegmentAmount('monthly_taxable_benefits');
                 $allowableDeductions = $sumSegmentAmount('monthly_allowable_deductions');
                 $taxCredits = $sumSegmentAmount('monthly_tax_credits');
+                $medicalEmployeeContribution = $sumSegmentAmount('monthly_medical_aid_employee_contribution');
+                $medicalEmployerContribution = $sumSegmentAmount('monthly_medical_aid_employer_contribution');
+                if (BigDecimal::of($medicalEmployeeContribution)->isPositive() && $rule->medical_aid_credit_rate === null) throw ValidationException::withMessages(['rules' => 'Medical aid contributions are enrolled, but the approved rule set has no sourced credit rate. Configure the current medical aid credit policy before running payroll.']);
                 $baseCashDeductions = $sumSegmentAmount('monthly_cash_deductions');
-                $currentCredits = PosMath::sum([$taxCredits, $sumAdjustments($adjustments, ['tax_credit'])], 2);
+                $medicalCredit = $rule->medical_aid_credit_rate === null ? '0.00' : (string) BigDecimal::of($medicalEmployeeContribution)->multipliedBy((string) $rule->medical_aid_credit_rate)->dividedBy('100', 2, \Brick\Math\RoundingMode::HalfUp);
+                $currentCredits = PosMath::sum([$taxCredits, $medicalCredit, $sumAdjustments($adjustments, ['tax_credit'])], 2);
                 $taxHistory = $this->taxYearContext($employee, $periodStart, $data['currency']);
                 $calc = $calculator->calculate($rule, [
-                    'monthly_salary' => $baseSalary, 'cash_earnings' => PosMath::sum([$recurringCash, $sumAdjustments($adjustments, ['cash_earning'])], 2),
+                    'monthly_salary' => $baseSalary, 'cash_earnings' => PosMath::sum([$recurringCash, $sumAdjustments($adjustments, ['cash_earning', 'bonus', 'leave_cash_out'])], 2), 'tax_exempt_income' => $bonusExemption,
                     'monthly_taxable_benefits' => PosMath::sum([$taxableBenefits, $sumAdjustments($adjustments, ['taxable_benefit'])], 2),
                     'monthly_allowable_deductions' => PosMath::sum([$allowableDeductions, $sumAdjustments($adjustments, ['allowable_deduction'])], 2),
                     'monthly_tax_credits' => '0',
-                    'monthly_cash_deductions' => PosMath::sum([$baseCashDeductions, $sumAdjustments($adjustments, ['cash_deduction', 'allowable_deduction'])], 2),
+                    'monthly_cash_deductions' => PosMath::sum([$baseCashDeductions, $medicalEmployeeContribution, $sumAdjustments($adjustments, ['cash_deduction', 'allowable_deduction'])], 2),
+                    'employer_medical_aid_contribution' => $medicalEmployerContribution,
                     'payable_days' => $periodStart->daysInMonth, 'period_days' => $periodStart->daysInMonth, 'daily_tax_basis' => false,
                     'nssa_eligible' => $nssaAgeEligible, 'apwcs_eligible' => $apwcsStatus['eligible'], 'employee_number' => $employee->employee_number,
                 ]);
@@ -507,8 +600,8 @@ class PayrollController
                 $calc['tax_credit_claimed'] = $taxHistory['method'] === 'NON_FDS' ? '0.00' : $currentCredits;
                 $calc['net_pay'] = PosMath::money(PosMath::sum([$calc['gross_salary'], '-'.(string) $calc['paye'], '-'.(string) $calc['aids_levy'], '-'.(string) $calc['nssa_employee'], '-'.(string) $calc['cash_deductions']], 2));
                 if (BigDecimal::of($calc['net_pay'])->isNegative()) throw ValidationException::withMessages(['salary' => 'Payroll deductions exceed cash salary for '.$employee->employee_number.'.']);
-                $segmentSnapshots = array_map(fn ($segment) => ['effective_from' => $segment['from']->toDateString(), 'effective_to' => $segment['to']->toDateString(), 'payable_days' => $segment['days'], 'salary_term_id' => $segment['term']->id, 'currency' => $segment['term']->currency, 'monthly_salary' => $segment['term']->monthly_salary, 'prorated_salary' => $prorate($segment['term']->monthly_salary, $segment['days']), 'monthly_recurring_cash_earnings' => $segment['term']->monthly_recurring_cash_earnings, 'monthly_taxable_benefits' => $segment['term']->monthly_taxable_benefits, 'monthly_allowable_deductions' => $segment['term']->monthly_allowable_deductions, 'monthly_tax_credits' => $segment['term']->monthly_tax_credits, 'monthly_cash_deductions' => $segment['term']->monthly_cash_deductions], $segments);
-                $calculations[] = ['employee' => $employee, 'term' => $term, 'calculation' => $calc, 'adjustments' => $adjustments, 'window' => $window, 'segments' => $segmentSnapshots, 'nssa_eligibility_basis' => $nssaEligibilityBasis, 'apwcs_eligibility_basis' => $apwcsStatus['basis'], 'tax_method' => $taxHistory['method'], 'tax_credit_claimed' => $calc['tax_credit_claimed'], 'cumulative_paye_before_credits' => $calc['cumulative_paye_before_credits'] ?? null, 'cumulative_tax_credit_applied' => $calc['cumulative_tax_credit_applied'] ?? null, 'prorated' => ['monthly_salary' => $baseSalary, 'monthly_recurring_cash_earnings' => $recurringCash, 'monthly_taxable_benefits' => $taxableBenefits, 'monthly_allowable_deductions' => $allowableDeductions, 'monthly_tax_credits' => $taxCredits, 'monthly_cash_deductions' => $baseCashDeductions]];
+                $segmentSnapshots = array_map(fn ($segment) => ['effective_from' => $segment['from']->toDateString(), 'effective_to' => $segment['to']->toDateString(), 'payable_days' => $segment['days'], 'salary_term_id' => $segment['term']->id, 'currency' => $segment['term']->currency, 'monthly_salary' => $segment['term']->monthly_salary, 'prorated_salary' => $prorate($segment['term']->monthly_salary, $segment['days']), 'monthly_recurring_cash_earnings' => $segment['term']->monthly_recurring_cash_earnings, 'monthly_taxable_benefits' => $segment['term']->monthly_taxable_benefits, 'monthly_allowable_deductions' => $segment['term']->monthly_allowable_deductions, 'monthly_tax_credits' => $segment['term']->monthly_tax_credits, 'monthly_cash_deductions' => $segment['term']->monthly_cash_deductions, 'medical_aid_provider_id' => $segment['term']->medical_aid_provider_id, 'medical_aid_member_number' => $segment['term']->medical_aid_member_number, 'monthly_medical_aid_employee_contribution' => $segment['term']->monthly_medical_aid_employee_contribution, 'monthly_medical_aid_employer_contribution' => $segment['term']->monthly_medical_aid_employer_contribution], $segments);
+                $calculations[] = ['employee' => $employee, 'term' => $term, 'calculation' => $calc, 'adjustments' => $adjustments, 'window' => $window, 'segments' => $segmentSnapshots, 'nssa_eligibility_basis' => $nssaEligibilityBasis, 'apwcs_eligibility_basis' => $apwcsStatus['basis'], 'tax_method' => $taxHistory['method'], 'tax_credit_claimed' => $calc['tax_credit_claimed'], 'cumulative_paye_before_credits' => $calc['cumulative_paye_before_credits'] ?? null, 'cumulative_tax_credit_applied' => $calc['cumulative_tax_credit_applied'] ?? null, 'prorated' => ['monthly_salary' => $baseSalary, 'monthly_recurring_cash_earnings' => $recurringCash, 'monthly_taxable_benefits' => $taxableBenefits, 'monthly_allowable_deductions' => $allowableDeductions, 'monthly_tax_credits' => $taxCredits, 'monthly_cash_deductions' => $baseCashDeductions, 'monthly_medical_aid_employee_contribution' => $medicalEmployeeContribution, 'monthly_medical_aid_employer_contribution' => $medicalEmployerContribution]];
             }
             $sum = fn ($key) => PosMath::sum(array_map(fn ($row) => $row['calculation'][$key], $calculations), 2);
             $totals = ['employees' => count($calculations), 'gross_salary' => $sum('gross_salary'), 'taxable_income' => $sum('taxable_income'), 'paye' => $sum('paye'), 'aids_levy' => $sum('aids_levy'), 'nssa_employee' => $sum('nssa_employee'), 'nssa_employer' => $sum('nssa_employer'), 'apwcs_employer' => $sum('apwcs_employer'), 'cash_deductions' => $sum('cash_deductions'), 'net_pay' => $sum('net_pay'), 'employer_cost' => $sum('employer_cost')];
@@ -516,7 +609,7 @@ class PayrollController
             foreach ($calculations as $row) {
                 $employee = $row['employee']; $term = $row['term']; $calc = $row['calculation'];
                 $leaveAccrual = $this->annualLeaveAccrual($employee, (int) $calc['payable_days'], (int) $calc['period_days'], $periodStart);
-                PayrollRunLine::create(['payroll_run_id' => $run->id, 'employee_id' => $employee->id, 'branch_id' => $employee->branch_id, 'snapshot' => ['employee' => $employee->preferred_name ?: $employee->legal_name, 'employee_number' => $employee->employee_number, 'job_title' => $employee->job_title, 'employee_group' => $employee->employee_group, 'job_grade' => $employee->job_grade, ...$leaveAccrual, 'employment_from' => $row['window']['from']->toDateString(), 'employment_to' => $row['window']['to']->toDateString(), 'payable_days' => $calc['payable_days'], 'period_days' => $calc['period_days'], 'salary_term_segments' => $row['segments'], 'nssa_eligibility_basis' => $row['nssa_eligibility_basis'], 'apwcs_eligibility_basis' => $row['apwcs_eligibility_basis'], 'apwcs_industry_code' => $rule->apwcs_industry_code, 'apwcs_employer_rate' => $rule->apwcs_employer_rate, 'tax_method' => $row['tax_method'], 'tax_credit_claimed' => $row['tax_credit_claimed'], 'cumulative_paye_before_credits' => $row['cumulative_paye_before_credits'], 'cumulative_tax_credit_applied' => $row['cumulative_tax_credit_applied'], 'monthly_salary' => $term->monthly_salary, 'prorated_monthly' => $row['prorated'], 'monthly_recurring_cash_earnings' => $term->monthly_recurring_cash_earnings, 'monthly_taxable_benefits' => $term->monthly_taxable_benefits, 'monthly_allowable_deductions' => $term->monthly_allowable_deductions, 'monthly_tax_credits' => $term->monthly_tax_credits, 'monthly_cash_deductions' => $term->monthly_cash_deductions, 'cash_deductions' => $calc['cash_deductions'], 'cash_earnings' => $calc['cash_earnings'], 'adjustments' => $row['adjustments'], 'paye_before_credits' => $calc['paye_before_credits'], 'tax_credit' => $calc['tax_credit'], 'employer_cost' => $calc['employer_cost']], ...collect($calc)->only('gross_salary', 'taxable_income', 'paye', 'aids_levy', 'nssa_employee', 'nssa_employer', 'apwcs_employer', 'net_pay')->all()]);
+                PayrollRunLine::create(['payroll_run_id' => $run->id, 'employee_id' => $employee->id, 'branch_id' => $employee->branch_id, 'snapshot' => ['employee' => $employee->preferred_name ?: $employee->legal_name, 'employee_number' => $employee->employee_number, 'job_title' => $employee->job_title, 'employee_group' => $employee->employee_group, 'job_grade' => $employee->job_grade, ...$leaveAccrual, 'annual_leave_paid_out_days' => (string) collect($row['adjustments'])->where('kind', 'leave_cash_out')->sum(fn ($item) => (float) ($item['leave_days'] ?? 0)), 'employment_from' => $row['window']['from']->toDateString(), 'employment_to' => $row['window']['to']->toDateString(), 'payable_days' => $calc['payable_days'], 'period_days' => $calc['period_days'], 'salary_term_segments' => $row['segments'], 'nssa_eligibility_basis' => $row['nssa_eligibility_basis'], 'apwcs_eligibility_basis' => $row['apwcs_eligibility_basis'], 'apwcs_industry_code' => $rule->apwcs_industry_code, 'apwcs_employer_rate' => $rule->apwcs_employer_rate, 'tax_method' => $row['tax_method'], 'tax_credit_claimed' => $row['tax_credit_claimed'], 'cumulative_paye_before_credits' => $row['cumulative_paye_before_credits'], 'cumulative_tax_credit_applied' => $row['cumulative_tax_credit_applied'], 'monthly_salary' => $term->monthly_salary, 'prorated_monthly' => $row['prorated'], 'monthly_recurring_cash_earnings' => $term->monthly_recurring_cash_earnings, 'monthly_taxable_benefits' => $term->monthly_taxable_benefits, 'monthly_allowable_deductions' => $term->monthly_allowable_deductions, 'monthly_tax_credits' => $term->monthly_tax_credits, 'monthly_cash_deductions' => $term->monthly_cash_deductions, 'medical_aid_provider' => $term->medicalAidProvider?->name, 'medical_aid_member_number' => $term->medical_aid_member_number, 'cash_deductions' => $calc['cash_deductions'], 'cash_earnings' => $calc['cash_earnings'], 'adjustments' => $row['adjustments'], 'paye_before_credits' => $calc['paye_before_credits'], 'tax_credit' => $calc['tax_credit'], 'employer_cost' => $calc['employer_cost']], ...collect($calc)->only('gross_salary', 'taxable_income', 'paye', 'aids_levy', 'nssa_employee', 'nssa_employer', 'apwcs_employer', 'net_pay')->all()]);
             }
             Audit::record('payroll.run.drafted', (string) $run->id, ['period' => $data['period'], 'currency' => $data['currency'], 'branch_id' => $data['branch_id'], 'employees' => count($calculations), 'rule_set_id' => $rule->id]);
             return $run->load('lines');
@@ -546,6 +639,7 @@ class PayrollController
         foreach ($data['adjustments'] ?? [] as $index => $adjustment) {
             if (! in_array((int) $adjustment['employee_id'], $employeeIds, true)) throw ValidationException::withMessages(["adjustments.$index.employee_id" => 'One-off adjustments must belong to an employee included in this branch and month.']);
             if (! in_array($adjustment['currency'] ?? '', ['USD', 'ZWG'], true)) throw ValidationException::withMessages(["adjustments.$index.currency" => 'Choose USD or ZWG for each mixed-pay adjustment.']);
+            if (($adjustment['kind'] ?? null) === 'bonus' && ($adjustment['currency'] ?? null) !== 'USD') throw ValidationException::withMessages(["adjustments.$index.currency" => 'Mixed-currency bonus payments must be allocated to USD so the annual USD exemption can be applied consistently.']);
         }
 
         $money = fn ($value) => BigDecimal::of((string) $value)->toScale(2, \Brick\Math\RoundingMode::HalfUp);
@@ -559,13 +653,20 @@ class PayrollController
             $employeePartial = false;
             $windowFrom = CarbonImmutable::parse($employee->start_date)->max($periodStart);
             $windowTo = $employee->end_date ? CarbonImmutable::parse($employee->end_date)->min($periodEnd) : $periodEnd;
-            $fields = ['monthly_salary', 'monthly_recurring_cash_earnings', 'monthly_taxable_benefits', 'monthly_allowable_deductions', 'monthly_tax_credits', 'monthly_cash_deductions'];
+            $fields = ['monthly_salary', 'monthly_recurring_cash_earnings', 'monthly_taxable_benefits', 'monthly_allowable_deductions', 'monthly_tax_credits', 'monthly_cash_deductions', 'monthly_medical_aid_employee_contribution', 'monthly_medical_aid_employer_contribution'];
             $native = ['USD' => [], 'ZWG' => []];
             foreach (['USD', 'ZWG'] as $code) foreach ($fields as $field) $native[$code][$field] = BigDecimal::zero();
             $salarySegments = ['USD' => [], 'ZWG' => []];
             $eligibilityFlags = [];
             $usesDailyTax = ! $windowFrom->equalTo($periodStart) || ! $windowTo->equalTo($periodEnd);
             $payableDays = $windowFrom->diffInDays($windowTo) + 1;
+            $employeeAdjustments = $adjustmentsByEmployee->get($employee->id, collect());
+            $leaveCashOutDays = (float) $employeeAdjustments->where('kind', 'leave_cash_out')->sum(fn ($item) => (float) ($item['leave_days'] ?? 0));
+            if ($leaveCashOutDays > 0) {
+                $currentLeave = $this->annualLeaveAccrual($employee, $payableDays, $periodStart->daysInMonth, $periodStart);
+                $availableLeave = (float) $currentLeave['annual_leave_cumulative_accrued_days'] - $this->annualLeaveUsed($employee, $periodStart->year) - $this->annualLeavePaidOut($employee, $periodStart->year, null, $periodStart);
+                if ($leaveCashOutDays - max(0, $availableLeave) > 0.0001) throw ValidationException::withMessages(['adjustments' => 'The leave cash-out exceeds accrued annual leave available for '.$employee->employee_number.'.']);
+            }
             foreach (['USD', 'ZWG'] as $code) {
                 $currencyTerms = $terms->get($employee->id, collect())->where('currency', $code)->filter(fn ($term) => $term->effective_from->lte($windowTo) && (! $term->effective_to || $term->effective_to->gte($windowFrom)))->sortBy('effective_from')->values();
                 $cursor = $windowFrom;
@@ -606,9 +707,10 @@ class PayrollController
             $apwcsStatus = $this->apwcsStatus($employee, $periodEnd);
             if ($apwcsStatus['eligible'] && $usdRule->apwcs_employer_rate === null) throw ValidationException::withMessages(['rules' => 'Mixed payroll requires the employer’s NSSA APWCS industry code, assigned premium rate and source in the approved USD rule.']);
 
-            $adjustments = $adjustmentsByEmployee->get($employee->id, collect())->values()->map(fn ($item) => ['kind' => $item['kind'], 'currency' => $item['currency'], 'description' => $item['description'], 'amount' => PosMath::money((string) $item['amount'])])->all();
+            $adjustments = $adjustmentsByEmployee->get($employee->id, collect())->values()->map(fn ($item) => ['head_id' => $item['head_id'] ?? null, 'kind' => $item['kind'], 'currency' => $item['currency'], 'leave_days' => $item['leave_days'] ?? null, 'description' => $item['description'], 'amount' => PosMath::money((string) $item['amount'])])->all();
             $adjustmentSums = ['USD' => [], 'ZWG' => []];
             foreach ($adjustments as $adjustment) $adjustmentSums[$adjustment['currency']][$adjustment['kind']][] = $adjustment['amount'];
+            foreach (['USD', 'ZWG'] as $code) foreach (['leave_cash_out', 'bonus'] as $earningKind) if (! empty($adjustmentSums[$code][$earningKind])) $adjustmentSums[$code]['cash_earning'] = [...($adjustmentSums[$code]['cash_earning'] ?? []), ...$adjustmentSums[$code][$earningKind]];
             foreach (['USD', 'ZWG'] as $code) foreach ([
                 'monthly_recurring_cash_earnings' => 'cash_earning', 'monthly_taxable_benefits' => 'taxable_benefit',
                 'monthly_allowable_deductions' => 'allowable_deduction', 'monthly_tax_credits' => 'tax_credit', 'monthly_cash_deductions' => 'cash_deduction',
@@ -627,7 +729,24 @@ class PayrollController
                 $taxableUsdByCurrency[$code] = $usdValue($code, $taxableNative);
             }
             $taxableUsd = $taxableUsdByCurrency['USD']->plus($taxableUsdByCurrency['ZWG'])->toScale(2, \Brick\Math\RoundingMode::HalfUp);
+            $bonusAmountUsd = PosMath::sum(collect($adjustments)->where('kind', 'bonus')->pluck('amount')->all() ?: ['0'], 2);
+            $bonusExemptionUsd = '0.00';
+            if (BigDecimal::of($bonusAmountUsd)->isPositive() && $usdRule->annual_bonus_exempt_limit !== null) {
+                if ($usdRule->annual_bonus_exempt_currency !== 'USD') throw ValidationException::withMessages(['rules' => 'Mixed payroll bonus exemptions must be configured in USD on the approved USD rule.']);
+                $priorBonus = BigDecimal::of($this->annualBonusAlreadyPaid($employee, $periodStart->year, 'USD', $periodStart));
+                $remaining = BigDecimal::of((string) $usdRule->annual_bonus_exempt_limit)->minus($priorBonus);
+                if ($remaining->isPositive()) $bonusExemptionUsd = BigDecimal::of($bonusAmountUsd)->isLessThan($remaining) ? $bonusAmountUsd : (string) $remaining->toScale(2, \Brick\Math\RoundingMode::HalfUp);
+                if (BigDecimal::of($bonusExemptionUsd)->isGreaterThan($taxableUsdByCurrency['USD'])) $bonusExemptionUsd = (string) $taxableUsdByCurrency['USD'];
+                $taxableUsdByCurrency['USD'] = $taxableUsdByCurrency['USD']->minus($bonusExemptionUsd)->toScale(2, \Brick\Math\RoundingMode::HalfUp);
+                $taxableUsd = $taxableUsdByCurrency['USD']->plus($taxableUsdByCurrency['ZWG'])->toScale(2, \Brick\Math\RoundingMode::HalfUp);
+            }
+            $exemptionAssigned = false;
+            foreach ($adjustments as &$adjustment) if ($adjustment['kind'] === 'bonus') { $adjustment['bonus_exempt_amount'] = $exemptionAssigned ? '0.00' : $bonusExemptionUsd; $exemptionAssigned = true; }
+            unset($adjustment);
             $creditsUsd = $usdValue('USD', $native['USD']['monthly_tax_credits'])->plus($usdValue('ZWG', $native['ZWG']['monthly_tax_credits']))->toScale(2, \Brick\Math\RoundingMode::HalfUp);
+            $medicalContributionUsd = $usdValue('USD', $native['USD']['monthly_medical_aid_employee_contribution'])->plus($usdValue('ZWG', $native['ZWG']['monthly_medical_aid_employee_contribution']))->toScale(2, \Brick\Math\RoundingMode::HalfUp);
+            if ($medicalContributionUsd->isPositive() && $usdRule->medical_aid_credit_rate === null) throw ValidationException::withMessages(['rules' => 'Medical aid contributions are enrolled, but the approved USD rule has no sourced credit rate. Configure it before running mixed payroll.']);
+            if ($usdRule->medical_aid_credit_rate !== null) $creditsUsd = $creditsUsd->plus($medicalContributionUsd->multipliedBy((string) $usdRule->medical_aid_credit_rate)->dividedBy('100', 2, \Brick\Math\RoundingMode::HalfUp))->toScale(2, \Brick\Math\RoundingMode::HalfUp);
             $taxHistory = $this->taxYearContext($employee, $periodStart, 'MIXED');
             $taxCalc = $calculator->calculate($usdRule, [
                 'monthly_salary' => (string) $taxableUsd, 'cash_earnings' => '0', 'monthly_taxable_benefits' => '0',
@@ -679,7 +798,7 @@ class PayrollController
             $net = [];
             foreach (['USD', 'ZWG'] as $code) {
                 $gross = $native[$code]['monthly_salary']->plus($native[$code]['monthly_recurring_cash_earnings'])->toScale(2, \Brick\Math\RoundingMode::HalfUp);
-                $cashWithheld = $native[$code]['monthly_cash_deductions']->plus($native[$code]['monthly_allowable_deductions'])->toScale(2, \Brick\Math\RoundingMode::HalfUp);
+                $cashWithheld = $native[$code]['monthly_cash_deductions']->plus($native[$code]['monthly_allowable_deductions'])->plus($native[$code]['monthly_medical_aid_employee_contribution'])->toScale(2, \Brick\Math\RoundingMode::HalfUp);
                 $net[$code] = $gross->minus($allocations[$code]['paye'])->minus($allocations[$code]['aids_levy'])->minus($nssa[$code]['employee'])->minus($cashWithheld)->toScale(2, \Brick\Math\RoundingMode::HalfUp);
                 if ($net[$code]->isNegative()) throw ValidationException::withMessages(['salary' => 'Deductions exceed '.$code.' cash pay for '.$employee->employee_number.'.']);
             }
@@ -697,9 +816,9 @@ class PayrollController
             'nssa_employee' => $sum(fn ($r) => $r['nssa']['USD']['employee']->plus($usdValue('ZWG', $r['nssa']['ZWG']['employee']))),
             'nssa_employer' => $sum(fn ($r) => $r['nssa']['USD']['employer']->plus($usdValue('ZWG', $r['nssa']['ZWG']['employer']))),
             'apwcs_employer' => $sum(fn ($r) => $r['apwcs']['USD']->plus($usdValue('ZWG', $r['apwcs']['ZWG']))),
-            'cash_deductions' => $sum(fn ($r) => $r['native']['USD']['monthly_cash_deductions']->plus($r['native']['USD']['monthly_allowable_deductions'])->plus($usdValue('ZWG', $r['native']['ZWG']['monthly_cash_deductions']->plus($r['native']['ZWG']['monthly_allowable_deductions'])))),
+            'cash_deductions' => $sum(fn ($r) => $r['native']['USD']['monthly_cash_deductions']->plus($r['native']['USD']['monthly_allowable_deductions'])->plus($r['native']['USD']['monthly_medical_aid_employee_contribution'])->plus($usdValue('ZWG', $r['native']['ZWG']['monthly_cash_deductions']->plus($r['native']['ZWG']['monthly_allowable_deductions'])->plus($r['native']['ZWG']['monthly_medical_aid_employee_contribution'])))),
             'net_pay' => $sum(fn ($r) => $r['net']['USD']->plus($usdValue('ZWG', $r['net']['ZWG']))),
-            'employer_cost' => $sum(fn ($r) => $r['cash_usd']->plus($r['nssa']['USD']['employer'])->plus($usdValue('ZWG', $r['nssa']['ZWG']['employer']))->plus($r['apwcs']['USD'])->plus($usdValue('ZWG', $r['apwcs']['ZWG']))),
+            'employer_cost' => $sum(fn ($r) => $r['cash_usd']->plus($r['nssa']['USD']['employer'])->plus($usdValue('ZWG', $r['nssa']['ZWG']['employer']))->plus($r['apwcs']['USD'])->plus($usdValue('ZWG', $r['apwcs']['ZWG']))->plus($usdValue('USD', $r['native']['USD']['monthly_medical_aid_employer_contribution']))->plus($usdValue('ZWG', $r['native']['ZWG']['monthly_medical_aid_employer_contribution']))),
             'currency_basis' => 'USD_equivalent',
             'net_pay_by_currency' => ['USD' => $sumCode('USD', fn ($r, $c) => $r['net'][$c]), 'ZWG' => $sumCode('ZWG', fn ($r, $c) => $r['net'][$c])],
             'paye_by_currency' => ['USD' => $sumCode('USD', fn ($r, $c) => $r['allocations'][$c]['paye']), 'ZWG' => $sumCode('ZWG', fn ($r, $c) => $r['allocations'][$c]['paye'])],
@@ -711,7 +830,7 @@ class PayrollController
         foreach ($calculations as $row) {
             $nssaUsd = $row['nssa']['USD']['employee']->plus($usdValue('ZWG', $row['nssa']['ZWG']['employee']));
             $nssaEmployerUsd = $row['nssa']['USD']['employer']->plus($usdValue('ZWG', $row['nssa']['ZWG']['employer']));
-            $deductionsUsd = $row['native']['USD']['monthly_cash_deductions']->plus($row['native']['USD']['monthly_allowable_deductions'])->plus($usdValue('ZWG', $row['native']['ZWG']['monthly_cash_deductions']->plus($row['native']['ZWG']['monthly_allowable_deductions'])));
+            $deductionsUsd = $row['native']['USD']['monthly_cash_deductions']->plus($row['native']['USD']['monthly_allowable_deductions'])->plus($row['native']['USD']['monthly_medical_aid_employee_contribution'])->plus($usdValue('ZWG', $row['native']['ZWG']['monthly_cash_deductions']->plus($row['native']['ZWG']['monthly_allowable_deductions'])->plus($row['native']['ZWG']['monthly_medical_aid_employee_contribution'])));
             $breakdown = [];
             foreach (['USD', 'ZWG'] as $code) $breakdown[$code] = [
                 'base_salary' => (string) $row['native'][$code]['monthly_salary'],
@@ -721,15 +840,16 @@ class PayrollController
                 'allowable_deductions' => (string) $row['native'][$code]['monthly_allowable_deductions'],
                 'tax_credits' => (string) $row['native'][$code]['monthly_tax_credits'],
                 'taxable_income' => (string) $row['taxable_usd_by_currency'][$code], 'paye' => (string) $row['allocations'][$code]['paye'],
+                'medical_aid_employee_contribution' => (string) $row['native'][$code]['monthly_medical_aid_employee_contribution'], 'medical_aid_employer_contribution' => (string) $row['native'][$code]['monthly_medical_aid_employer_contribution'],
                 'aids_levy' => (string) $row['allocations'][$code]['aids_levy'], 'nssa_employee' => (string) $row['nssa'][$code]['employee'],
-                'nssa_employer' => (string) $row['nssa'][$code]['employer'], 'other_cash_deductions' => (string) $row['native'][$code]['monthly_cash_deductions'],
+                'nssa_employer' => (string) $row['nssa'][$code]['employer'], 'other_cash_deductions' => (string) $row['native'][$code]['monthly_cash_deductions']->plus($row['native'][$code]['monthly_medical_aid_employee_contribution']),
                 'apwcs_insurable_earnings' => (string) $row['native'][$code]['monthly_salary'], 'apwcs_employer' => (string) $row['apwcs'][$code],
-                'cash_deductions' => (string) $row['native'][$code]['monthly_cash_deductions']->plus($row['native'][$code]['monthly_allowable_deductions']),
+                'cash_deductions' => (string) $row['native'][$code]['monthly_cash_deductions']->plus($row['native'][$code]['monthly_allowable_deductions'])->plus($row['native'][$code]['monthly_medical_aid_employee_contribution']),
                 'net_pay' => (string) $row['net'][$code],
             ];
             $apwcsUsd = $row['apwcs']['USD']->plus($usdValue('ZWG', $row['apwcs']['ZWG']));
             $leaveAccrual = $this->annualLeaveAccrual($row['employee'], $row['payable_days'], $row['period_days'], $periodStart);
-            $snapshot = ['employee' => $row['employee']->preferred_name ?: $row['employee']->legal_name, 'employee_number' => $row['employee']->employee_number, 'job_title' => $row['employee']->job_title, 'employee_group' => $row['employee']->employee_group, 'job_grade' => $row['employee']->job_grade, ...$leaveAccrual, 'payable_days' => $row['payable_days'], 'period_days' => $row['period_days'], 'nssa_eligibility_basis' => $row['nssa_eligibility_basis'], 'apwcs_eligibility_basis' => $row['apwcs_eligibility_basis'], 'apwcs_industry_code' => $usdRule->apwcs_industry_code, 'apwcs_employer_rate' => $usdRule->apwcs_employer_rate, 'tax_method' => $row['tax']['tax_method'], 'tax_credit_claimed' => $row['tax']['tax_credit_claimed'], 'cumulative_paye_before_credits' => $row['tax']['cumulative_paye_before_credits'] ?? null, 'cumulative_tax_credit_applied' => $row['tax']['cumulative_tax_credit_applied'] ?? null, 'currency_basis' => 'USD_equivalent', 'currency_breakdown' => $breakdown, 'mixed_currency_fx' => ['payment_date' => $paymentDate, 'USD' => $usdFx, 'ZWG' => $zwgFx], 'paye_before_credits' => $row['tax']['paye_before_credits'], 'tax_credit' => $row['tax']['tax_credit'], 'cash_deductions' => (string) $deductionsUsd, 'adjustments' => $row['adjustments'], 'salary_term_segments' => array_merge($row['salary_segments']['USD'], $row['salary_segments']['ZWG'])];
+            $snapshot = ['employee' => $row['employee']->preferred_name ?: $row['employee']->legal_name, 'employee_number' => $row['employee']->employee_number, 'job_title' => $row['employee']->job_title, 'employee_group' => $row['employee']->employee_group, 'job_grade' => $row['employee']->job_grade, ...$leaveAccrual, 'annual_leave_paid_out_days' => (string) collect($row['adjustments'])->where('kind', 'leave_cash_out')->sum(fn ($item) => (float) ($item['leave_days'] ?? 0)), 'payable_days' => $row['payable_days'], 'period_days' => $row['period_days'], 'nssa_eligibility_basis' => $row['nssa_eligibility_basis'], 'apwcs_eligibility_basis' => $row['apwcs_eligibility_basis'], 'apwcs_industry_code' => $usdRule->apwcs_industry_code, 'apwcs_employer_rate' => $usdRule->apwcs_employer_rate, 'tax_method' => $row['tax']['tax_method'], 'tax_credit_claimed' => $row['tax']['tax_credit_claimed'], 'cumulative_paye_before_credits' => $row['tax']['cumulative_paye_before_credits'] ?? null, 'cumulative_tax_credit_applied' => $row['tax']['cumulative_tax_credit_applied'] ?? null, 'currency_basis' => 'USD_equivalent', 'currency_breakdown' => $breakdown, 'mixed_currency_fx' => ['payment_date' => $paymentDate, 'USD' => $usdFx, 'ZWG' => $zwgFx], 'paye_before_credits' => $row['tax']['paye_before_credits'], 'tax_credit' => $row['tax']['tax_credit'], 'cash_deductions' => (string) $deductionsUsd, 'adjustments' => $row['adjustments'], 'salary_term_segments' => array_merge($row['salary_segments']['USD'], $row['salary_segments']['ZWG'])];
             PayrollRunLine::create(['payroll_run_id' => $run->id, 'employee_id' => $row['employee']->id, 'branch_id' => $row['employee']->branch_id, 'snapshot' => $snapshot, 'gross_salary' => (string) $row['cash_usd'], 'taxable_income' => (string) $row['taxable_usd'], 'paye' => $row['tax']['paye'], 'aids_levy' => $row['tax']['aids_levy'], 'nssa_employee' => (string) $nssaUsd, 'nssa_employer' => (string) $nssaEmployerUsd, 'apwcs_employer' => (string) $apwcsUsd, 'net_pay' => (string) $row['net']['USD']->plus($usdValue('ZWG', $row['net']['ZWG']))]);
         }
         Audit::record('payroll.run.drafted', (string) $run->id, ['period' => $periodStart->format('Y-m'), 'currency' => 'MIXED', 'branch_id' => $data['branch_id'], 'employees' => count($calculations), 'rule_set_id' => $usdRule->id, 'payment_date' => $paymentDate, 'exchange_rate_ids' => [$zwgFx['exchange_rate_id']]]);
@@ -745,6 +865,24 @@ class PayrollController
             if ($run->status !== 'draft') throw ValidationException::withMessages(['run' => 'Only draft payroll calculations can be approved.']);
             if ($run->created_by === $request->user()->id) throw ValidationException::withMessages(['run' => 'The payroll run preparer cannot approve their own calculation.']);
             $run->load('lines');
+            foreach ($run->lines as $line) {
+                $paidOutDays = (float) ($line->snapshot['annual_leave_paid_out_days'] ?? 0);
+                $employee = $line->employee;
+                if ($paidOutDays > 0) {
+                    $available = (float) ($line->snapshot['annual_leave_cumulative_accrued_days'] ?? 0) - $this->annualLeaveUsed($employee, $run->period_start->year) - $this->annualLeavePaidOut($employee, $run->period_start->year, $run->id, $run->period_start);
+                    if ($paidOutDays - max(0, $available) > 0.0001) throw ValidationException::withMessages(['run' => 'An approved leave request or payroll payout has reduced the annual leave available for '.$line->snapshot['employee_number'].'. Redraft this cash-out.']);
+                }
+                $bonuses = collect($line->snapshot['adjustments'] ?? [])->where('kind', 'bonus');
+                $bonusAmount = BigDecimal::of(PosMath::sum($bonuses->pluck('amount')->all() ?: ['0'], 2));
+                $bonusExempt = BigDecimal::of(PosMath::sum($bonuses->pluck('bonus_exempt_amount')->all() ?: ['0'], 2));
+                $ruleSet = $run->ruleSet;
+                if ($bonusExempt->isPositive() && $ruleSet?->annual_bonus_exempt_limit !== null) {
+                    $bonusCurrency = $run->currency === 'MIXED' ? 'USD' : $run->currency;
+                    $priorBonus = BigDecimal::of($this->annualBonusAlreadyPaid($employee, $run->period_start->year, $bonusCurrency, $run->period_start, $run->id));
+                    $remainingBonus = BigDecimal::of((string) $ruleSet->annual_bonus_exempt_limit)->minus($priorBonus);
+                    if ($bonusAmount->isNegative() || $bonusExempt->isGreaterThan($bonusAmount) || $bonusExempt->isGreaterThan($remainingBonus)) throw ValidationException::withMessages(['run' => 'An approved bonus payroll changed this employee’s annual exemption balance. Redraft the bonus calculation before approval.']);
+                }
+            }
             $accrualEmployeeIds = $run->lines->filter(fn ($line) => (float) ($line->snapshot['annual_leave_accrual_days'] ?? 0) > 0)->pluck('employee_id');
             if ($accrualEmployeeIds->isNotEmpty()) {
                 $samePeriodRuns = PayrollRun::with(['lines', 'postings'])->where('id', '!=', $run->id)
@@ -796,6 +934,13 @@ class PayrollController
             $grossBase = $toBase($run->totals['gross_salary']);
             $employerNssaBase = $toBase($run->totals['nssa_employer']);
             $employerApwcsBase = $toBase($run->totals['apwcs_employer'] ?? '0');
+            if ($mixed) {
+                $medicalUsd = BigDecimal::of(PosMath::sum($run->lines->map(fn ($line) => $line->snapshot['currency_breakdown']['USD']['medical_aid_employer_contribution'] ?? '0')->all() ?: ['0'], 2));
+                $medicalZwg = BigDecimal::of(PosMath::sum($run->lines->map(fn ($line) => $line->snapshot['currency_breakdown']['ZWG']['medical_aid_employer_contribution'] ?? '0')->all() ?: ['0'], 2));
+                $medicalAidEmployerBase = $baseCurrency === 'USD' ? $medicalUsd->plus($medicalZwg->multipliedBy($fxSnapshot['ZWG']['usd_per_unit']))->toScale(4, \Brick\Math\RoundingMode::HalfUp) : $medicalUsd->dividedBy($fxSnapshot['ZWG']['usd_per_unit'], 4, \Brick\Math\RoundingMode::HalfUp)->plus($medicalZwg)->toScale(4, \Brick\Math\RoundingMode::HalfUp);
+            } else {
+                $medicalAidEmployerBase = $toBase(PosMath::sum($run->lines->map(fn ($line) => $line->snapshot['prorated_monthly']['monthly_medical_aid_employer_contribution'] ?? '0')->all() ?: ['0'], 2));
+            }
             $payeBase = $toBase($run->totals['paye']);
             $levyBase = $toBase($run->totals['aids_levy']);
             $taxLiabilityBase = $payeBase->plus($levyBase)->toScale(4, \Brick\Math\RoundingMode::HalfUp);
@@ -811,6 +956,7 @@ class PayrollController
                 'description' => 'Monthly payroll '.$run->period_start->format('F Y'), 'cashflow' => 'none',
                 'lines' => [
                     $ledger->line('payroll_expense', (string) $grossBase, '0', 'Gross wages'.($mixed ? ' (base currency equivalent)' : '')),
+                    $ledger->line('payroll_expense', (string) $medicalAidEmployerBase, '0', 'Employer medical aid contributions'.($mixed ? ' (base currency equivalent)' : '')),
                     $ledger->line('payroll_nssa_expense', (string) $employerNssaBase->plus($employerApwcsBase), '0', 'Employer NSSA POBS and APWCS'.($mixed ? ' (base currency equivalent)' : '')),
                     $ledger->line('payroll_net_payable', '0', (string) $netPayBase, 'Net wages payable'.($mixed ? ' (base currency equivalent)' : '')),
                     $taxLiabilityBase->isNegative()
@@ -818,6 +964,7 @@ class PayrollController
                         : $ledger->line('payroll_paye_payable', '0', (string) $taxLiabilityBase, 'PAYE and AIDS levy payable'.($mixed ? ' (base currency equivalent)' : '')),
                     $ledger->line('payroll_nssa_payable', '0', (string) $employeeNssaBase->plus($employerNssaBase)->plus($employerApwcsBase), 'NSSA POBS and APWCS contributions payable'.($mixed ? ' (base currency equivalent)' : '')),
                     $ledger->line('payroll_other_deductions', '0', (string) $otherDeductionsBase, 'Other payroll deductions payable'.($mixed ? ' (base currency equivalent)' : '')),
+                    $ledger->line('payroll_other_deductions', '0', (string) $medicalAidEmployerBase, 'Medical aid provider contributions payable'.($mixed ? ' (base currency equivalent)' : '')),
                 ],
             ]);
             if (! $journal) throw ValidationException::withMessages(['run' => 'Payroll journal was empty and could not be posted.']);

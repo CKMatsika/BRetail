@@ -51,6 +51,7 @@
                 <tr @if ($key === 'net_pay') class="net" @endif><td>{{ $label }}</td><td>USD {{ number_format((float) $snapshot['currency_breakdown']['USD'][$key], 2) }}</td><td>ZWG {{ number_format((float) $snapshot['currency_breakdown']['ZWG'][$key], 2) }}</td></tr>
             @endforeach
         </tbody></table>
+        @if (count($snapshot['adjustments'] ?? []))<h2>One-off payroll items</h2><table><thead><tr><th>Item</th><th>Currency</th><th>Amount</th><th>Notes</th></tr></thead><tbody>@foreach ($snapshot['adjustments'] as $adjustment)<tr><td>{{ $adjustment['description'] }} · {{ str_replace('_', ' ', $adjustment['kind']) }}</td><td>{{ $adjustment['currency'] ?? 'USD' }}</td><td>{{ number_format((float) $adjustment['amount'], 2) }}</td><td>@if ((float) ($adjustment['bonus_exempt_amount'] ?? 0) > 0)Exempt bonus: {{ number_format((float) $adjustment['bonus_exempt_amount'], 2) }}@elseif (!empty($adjustment['leave_days'])){{ number_format((float) $adjustment['leave_days'], 2) }} leave days paid out@endif</td></tr>@endforeach</tbody></table>@endif
         <h2>Tax calculation (USD equivalent)</h2>
         <table><tbody>
             <tr><td>Taxable income</td><td>USD {{ number_format((float) $line->taxable_income, 2) }}</td></tr>
@@ -66,18 +67,19 @@
             <tr><td>Recurring cash earnings</td><td>{{ $run->currency }} {{ number_format((float) ($snapshot['prorated_monthly']['monthly_recurring_cash_earnings'] ?? $snapshot['monthly_recurring_cash_earnings']), 2) }}</td></tr>
         @endif
         @foreach (collect($snapshot['adjustments'] ?? [])->where('kind', '!=', 'tax_credit') as $adjustment)
-            <tr><td>{{ $adjustment['description'] }} ({{ str_replace('_', ' ', $adjustment['kind']) }})</td><td>{{ in_array($adjustment['kind'], ['allowable_deduction', 'tax_credit', 'cash_deduction'], true) ? '− ' : '' }}{{ $run->currency }} {{ number_format((float) $adjustment['amount'], 2) }}</td></tr>
+            <tr><td>{{ $adjustment['description'] }} ({{ str_replace('_', ' ', $adjustment['kind']) }}) @if ((float) ($adjustment['bonus_exempt_amount'] ?? 0) > 0)<small>Tax-exempt bonus: {{ $adjustment['currency'] ?? $run->currency }} {{ number_format((float) $adjustment['bonus_exempt_amount'], 2) }}</small>@endif</td><td>{{ in_array($adjustment['kind'], ['allowable_deduction', 'tax_credit', 'cash_deduction'], true) ? '− ' : '' }}{{ $adjustment['currency'] ?? $run->currency }} {{ number_format((float) $adjustment['amount'], 2) }}</td></tr>
         @endforeach
         <tr><td>Total gross cash wages</td><td>{{ $run->currency }} {{ number_format((float) $line->gross_salary, 2) }}</td></tr>
         <tr><td>Taxable noncash benefits</td><td>{{ $run->currency }} {{ number_format((float) ($snapshot['prorated_monthly']['monthly_taxable_benefits'] ?? $snapshot['monthly_taxable_benefits'] ?? 0), 2) }}</td></tr>
         <tr><td>Allowable PAYE deductions</td><td>{{ $run->currency }} {{ number_format((float) ($snapshot['prorated_monthly']['monthly_allowable_deductions'] ?? $snapshot['monthly_allowable_deductions'] ?? 0), 2) }}</td></tr>
+        @if (!empty($snapshot['medical_aid_provider']))<tr><td>Medical aid · {{ $snapshot['medical_aid_provider'] }} <small>{{ $snapshot['medical_aid_member_number'] ?? '' }} · employee contribution {{ $run->currency }} {{ number_format((float) ($snapshot['prorated_monthly']['monthly_medical_aid_employee_contribution'] ?? 0), 2) }} · employer contribution {{ $run->currency }} {{ number_format((float) ($snapshot['prorated_monthly']['monthly_medical_aid_employer_contribution'] ?? 0), 2) }}</small></td><td>Included in payroll</td></tr>@endif
         <tr><td>Taxable income</td><td>{{ $run->currency }} {{ number_format((float) $line->taxable_income, 2) }}</td></tr>
         <tr><td>PAYE before credits</td><td>{{ $run->currency }} {{ number_format((float) ($snapshot['paye_before_credits'] ?? 0), 2) }}</td></tr>
         <tr><td>Tax credits</td><td>− {{ $run->currency }} {{ number_format((float) ($snapshot['tax_credit'] ?? 0), 2) }}</td></tr>
         <tr><td>PAYE withheld</td><td>{{ $run->currency }} {{ number_format((float) $line->paye, 2) }}</td></tr>
         <tr><td>AIDS levy</td><td>{{ $run->currency }} {{ number_format((float) $line->aids_levy, 2) }}</td></tr>
         <tr><td>NSSA employee contribution</td><td>{{ $run->currency }} {{ number_format((float) $line->nssa_employee, 2) }}</td></tr>
-        <tr><td>Other cash deductions</td><td>{{ $run->currency }} {{ number_format((float) ($snapshot['cash_deductions'] ?? $snapshot['monthly_cash_deductions'] ?? 0), 2) }}</td></tr>
+        <tr><td>Cash deductions @if ((float) ($snapshot['prorated_monthly']['monthly_medical_aid_employee_contribution'] ?? 0) > 0)<small>Includes medical aid employee share: {{ $run->currency }} {{ number_format((float) $snapshot['prorated_monthly']['monthly_medical_aid_employee_contribution'], 2) }}</small>@endif</td><td>{{ $run->currency }} {{ number_format((float) ($snapshot['cash_deductions'] ?? $snapshot['monthly_cash_deductions'] ?? 0), 2) }}</td></tr>
         <tr class="net"><td>Net cash pay</td><td>{{ $run->currency }} {{ number_format((float) $line->net_pay, 2) }}</td></tr>
     </tbody></table>
     @endif
@@ -86,6 +88,7 @@
         <table><tbody>
             <tr><td>Annual leave accrued this payroll</td><td>{{ number_format((float) $snapshot['annual_leave_accrual_days'], 2) }} working days</td></tr>
             <tr><td>Annual leave accrued year to date</td><td>{{ number_format((float) $snapshot['annual_leave_cumulative_accrued_days'], 2) }} working days</td></tr>
+            @if ((float) ($snapshot['annual_leave_paid_out_days'] ?? 0) > 0)<tr><td>Annual leave paid out this payroll</td><td>{{ number_format((float) $snapshot['annual_leave_paid_out_days'], 2) }} working days</td></tr>@endif
             <tr><td>Annual entitlement</td><td>{{ number_format((float) $snapshot['annual_leave_entitlement_days'], 2) }} working days per year</td></tr>
         </tbody></table>
     @endif

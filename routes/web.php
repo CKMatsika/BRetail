@@ -178,6 +178,8 @@ Route::middleware(['auth', 'tenant', 'module:access'])->group(function () {
 });
 Route::middleware(['auth','tenant','module:payroll'])->group(function () {
     Route::post('/payroll/rules', [\App\Http\Controllers\PayrollController::class, 'storeRule']);
+    Route::post('/payroll/heads', [\App\Http\Controllers\PayrollController::class, 'storeHead']);
+    Route::post('/payroll/medical-aid-providers', [\App\Http\Controllers\PayrollController::class, 'storeMedicalAidProvider']);
     Route::patch('/payroll/rules/{id}/approve', [\App\Http\Controllers\PayrollController::class, 'approveRule']);
     Route::post('/payroll/employees/{employeeId}/compensation', [\App\Http\Controllers\PayrollController::class, 'storeCompensation']);
     Route::post('/payroll/runs', [\App\Http\Controllers\PayrollController::class, 'storeRun']);

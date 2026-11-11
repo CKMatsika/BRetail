@@ -77,12 +77,15 @@ class HrController
         $types = LeaveType::where('active', true)->orderBy('name')->get();
         $approvedDays = LeaveRequest::whereIn('employee_id', $employeeIds)->where('status', 'approved')->whereBetween('start_date', [$years->first().'-01-01', $years->last().'-12-31'])->get()->groupBy(fn ($row) => $row->employee_id.':'.$row->leave_type_id.':'.$row->start_date->year)->map(fn ($rows) => (float) $rows->sum('days'));
         $annualAccrualByPeriod = [];
+        $annualLeavePaidOutByYear = [];
         $approvedPayrollRuns = PayrollRun::with(['lines' => fn ($query) => $query->whereIn('employee_id', $employeeIds), 'postings'])
             ->where('status', 'approved')->whereBetween('period_start', [$years->first().'-01-01', $years->last().'-12-31'])
             ->whereHas('lines', fn ($query) => $query->whereIn('employee_id', $employeeIds))->get();
         foreach ($approvedPayrollRuns as $run) {
             if ($run->postings->contains('kind', 'reversal')) continue;
             foreach ($run->lines as $line) {
+                $paidOut = (float) ($line->snapshot['annual_leave_paid_out_days'] ?? 0);
+                if ($paidOut > 0) $annualLeavePaidOutByYear[$line->employee_id.':'.$run->period_start->year] = ($annualLeavePaidOutByYear[$line->employee_id.':'.$run->period_start->year] ?? 0) + $paidOut;
                 $days = $line->snapshot['annual_leave_accrual_days'] ?? null;
                 if ($days === null) {
                     $employee = $employees->firstWhere('id', $line->employee_id);
@@ -110,11 +113,13 @@ class HrController
             'branches' => Branch::whereIn('id', $this->branchIds($request))->where('active', true)->orderBy('name')->get(['id', 'name']),
             'leave_types' => $types,
             'leave_requests' => $leaveRequests->map(fn ($l) => [...$l->only('id', 'days', 'reason', 'status', 'decision_note', 'created_at'), 'start_date' => $l->start_date->toDateString(), 'end_date' => $l->end_date->toDateString(), 'employee' => $l->employee?->legal_name, 'employee_number' => $l->employee?->employee_number, 'leave_type' => $l->leaveType?->name, 'requested_by' => $l->requested_by]),
-            'leave_balances' => $employees->flatMap(fn (Employee $employee) => $types->flatMap(fn ($type) => $years->map(function ($year) use ($employee, $type, $approvedDays, $annualAccrualByPeriod) {
-                $used = $approvedDays[$employee->id.':'.$type->id.':'.$year] ?? 0;
+            'leave_balances' => $employees->flatMap(fn (Employee $employee) => $types->flatMap(fn ($type) => $years->map(function ($year) use ($employee, $type, $approvedDays, $annualAccrualByPeriod, $annualLeavePaidOutByYear) {
+                $leaveUsed = $approvedDays[$employee->id.':'.$type->id.':'.$year] ?? 0;
                 $isAnnualLeave = mb_strtolower(trim($type->name)) === 'annual leave';
+                $paidOut = $isAnnualLeave ? ($annualLeavePaidOutByYear[$employee->id.':'.$year] ?? 0) : 0;
+                $used = $leaveUsed + $paidOut;
                 $accrued = $isAnnualLeave ? collect($annualAccrualByPeriod)->filter(fn ($row, $key) => str_starts_with($key, $employee->id.':') && $row['year'] === $year)->sum(fn ($row) => (float) $row['days']) : (float) $type->annual_entitlement;
-                return ['id' => $employee->id.'-'.$type->id.'-'.$year, 'employee' => $employee->preferred_name ?: $employee->legal_name, 'employee_number' => $employee->employee_number, 'name' => $type->name, 'year' => $year, 'entitlement' => $isAnnualLeave ? (float) $employee->annual_leave_entitlement_days : (float) $type->annual_entitlement, 'accrued' => $isAnnualLeave ? $accrued : (float) $type->annual_entitlement, 'used' => $used, 'remaining' => max(0, $accrued - $used), 'paid' => $type->paid];
+                return ['id' => $employee->id.'-'.$type->id.'-'.$year, 'employee' => $employee->preferred_name ?: $employee->legal_name, 'employee_number' => $employee->employee_number, 'name' => $type->name, 'year' => $year, 'entitlement' => $isAnnualLeave ? (float) $employee->annual_leave_entitlement_days : (float) $type->annual_entitlement, 'accrued' => $isAnnualLeave ? $accrued : (float) $type->annual_entitlement, 'used' => $used, 'leave_taken' => $leaveUsed, 'cashed_out' => $paidOut, 'remaining' => max(0, $accrued - $used), 'paid' => $type->paid];
             }))),
             'can' => ['create' => $request->user()->canDo('hr.create'), 'edit' => $request->user()->canDo('hr.edit'), 'personal_manage' => $request->user()->canDo('hr.personal.manage'), 'payroll_view' => $request->user()->canDo('payroll.view') && TenantModule::where('key', 'payroll')->where('enabled', true)->exists(), 'payroll_enabled' => TenantModule::where('key', 'payroll')->where('enabled', true)->exists(), 'modules_configure' => $request->user()->canDo('modules.configure'), 'modules_view' => $request->user()->canDo('modules.view'), 'nssa_export' => $request->user()->canDo('hr.personal.view') && $request->user()->canDo('payroll.compensation.view') && $request->user()->canDo('payroll.runs.export') && TenantModule::where('key', 'payroll')->where('enabled', true)->exists(), 'history' => $request->user()->canDo('hr.history.view'), 'leave_manage' => $request->user()->canDo('hr.leave.manage'), 'leave_request' => $request->user()->canDo('hr.leave.request'), 'leave_approve' => $request->user()->canDo('hr.leave.approve')],
             'viewer_id' => $request->user()->id,
@@ -368,6 +373,10 @@ class HrController
                 $type = LeaveType::findOrFail($leave->leave_type_id);
                 $used = (float) LeaveRequest::where('employee_id', $leave->employee_id)->where('leave_type_id', $type->id)->where('status', 'approved')->whereYear('start_date', $leave->start_date->year)->sum('days');
                 $limit = mb_strtolower(trim($type->name)) === 'annual leave' ? $this->annualLeaveAccruedForYear($employee, $leave->start_date->year) : (float) $type->annual_entitlement;
+                if (mb_strtolower(trim($type->name)) === 'annual leave') {
+                    $paidOut = PayrollRun::with(['lines', 'postings'])->where('status', 'approved')->whereYear('period_start', $leave->start_date->year)->whereHas('lines', fn ($query) => $query->where('employee_id', $employee->id))->get()->filter(fn ($run) => ! $run->postings->contains('kind', 'reversal'))->sum(fn ($run) => (float) ($run->lines->firstWhere('employee_id', $employee->id)?->snapshot['annual_leave_paid_out_days'] ?? 0));
+                    $used += $paidOut;
+                }
                 if ($used + (float) $leave->days > $limit) throw ValidationException::withMessages(['decision' => 'Approving this request would exceed the employee’s accrued leave balance.']);
             }
             $leave->update(['status' => $data['decision'], 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['decision_note'] ?? null]);
