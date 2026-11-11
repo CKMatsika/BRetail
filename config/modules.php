@@ -17,4 +17,6 @@ return [
     'reports' => ['name' => 'Reports & analytics', 'phase' => 8, 'available' => true, 'depends' => ['accounting']],
     'mobile' => ['name' => 'Mobile & offline services', 'phase' => 8, 'depends' => ['pos']],
     'backoffice' => ['name' => 'Back office', 'phase' => 5, 'available' => true, 'depends' => ['sales', 'purchasing']],
+    'tenders' => ['name' => 'Tender management', 'phase' => 9, 'available' => true, 'depends' => ['administration']],
+    'compliance' => ['name' => 'Compliance documents', 'phase' => 9, 'available' => true, 'depends' => ['administration']],
 ];

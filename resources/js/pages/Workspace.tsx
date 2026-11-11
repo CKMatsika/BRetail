@@ -87,7 +87,7 @@ type Props = InventoryProps &
             logo_url?: string | null;
             base_currency: string;
             accepted_currencies: string[];
-            settings: Record<string, string>;
+            settings: Record<string, any>;
         };
         branches: Branch[];
         modules: Module[];
@@ -139,10 +139,11 @@ const nav = [
     },
     {
         key: "tenders",
-        label: "Tenders & Compliance",
+        label: "Tender management",
         icon: ShieldCheck,
         permission: "tenders.view",
     },
+    { key: "compliance", label: "Compliance documents", icon: ShieldCheck, permission: "compliance.view" },
     {
         key: "sales",
         label: "Customers & sales",
@@ -228,6 +229,7 @@ const navigationOrder = [
     "sales",
     "purchasing",
     "tenders",
+    "compliance",
     "inventory",
     "loyalty",
     "backoffice",
@@ -485,7 +487,15 @@ function CompanyForm({
     company: Props["company"];
     editable: boolean;
 }) {
-    const f = useForm({ name: company.name, settings: company.settings });
+    const f = useForm({
+        name: company.name,
+        settings: {
+            ...company.settings,
+            tax_rates: Array.isArray(company.settings.tax_rates)
+                ? company.settings.tax_rates
+                : [{ name: company.settings.tax_label || "VAT", rate: Number(company.settings.tax_rate || 0), type: Number(company.settings.tax_rate || 0) === 0 ? "zero" : "standard" }],
+        },
+    });
     return (
         <form
             className="panel settings-form"
@@ -592,6 +602,19 @@ function CompanyForm({
                     on POS receipts.
                 </p>
             </section>
+            <section style={{ borderTop: "1px solid var(--line)", paddingTop: 20, marginTop: 20 }}>
+                <h3>Tax settings</h3>
+                <p className="muted">Set the tax rates available on sales and purchase documents. Use zero-rated for VAT at 0% and exempt for items outside VAT.</p>
+                {(f.data.settings.tax_rates ?? []).map((tax: any, index: number) => (
+                    <div className="form-grid" key={index} style={{ alignItems: "end" }}>
+                        <label className="field">Tax name<input disabled={!editable} value={tax.name} onChange={(e) => { const rows = [...f.data.settings.tax_rates]; rows[index] = { ...tax, name: e.target.value }; f.setData("settings", { ...f.data.settings, tax_rates: rows }); }} /></label>
+                        <label className="field">Type<select disabled={!editable} value={tax.type} onChange={(e) => { const type = e.target.value; const rows = [...f.data.settings.tax_rates]; rows[index] = { ...tax, type, rate: type === "zero" || type === "exempt" ? 0 : tax.rate }; f.setData("settings", { ...f.data.settings, tax_rates: rows }); }}><option value="standard">Standard rate</option><option value="zero">Zero-rated (0%)</option><option value="exempt">Exempt (0%)</option></select></label>
+                        <label className="field">Rate %<input disabled={!editable || tax.type !== "standard"} type="number" min="0" max="100" step="0.0001" value={tax.rate} onChange={(e) => { const rows = [...f.data.settings.tax_rates]; rows[index] = { ...tax, rate: e.target.value }; f.setData("settings", { ...f.data.settings, tax_rates: rows }); }} /></label>
+                        {editable && <button type="button" className="secondary" onClick={() => f.setData("settings", { ...f.data.settings, tax_rates: f.data.settings.tax_rates.filter((_: any, i: number) => i !== index) })}>Remove</button>}
+                    </div>
+                ))}
+                {editable && <button type="button" className="secondary" onClick={() => f.setData("settings", { ...f.data.settings, tax_rates: [...f.data.settings.tax_rates, { name: "", rate: 0, type: "zero" }] })}>Add tax rate</button>}
+            </section>
             <div className="notice">
                 Base currency: {company.base_currency} · Accepted:{" "}
                 {company.accepted_currencies.join(", ")}
@@ -616,7 +639,6 @@ export default function Workspace(p: Props) {
     );
     const [bm, setBm] = useState<Branch | true | null>(null);
     const [tm, setTm] = useState<Person | true | null>(null);
-    const [companyTab, setCompanyTab] = useState<"general" | "compliance">("general");
     const [search, setSearch] = useState("");
     const [failedLogo, setFailedLogo] = useState<string | null>(null);
     const can = (s: string) =>
@@ -664,8 +686,6 @@ export default function Workspace(p: Props) {
                         .filter(
                             (n) =>
                                 (can(n.permission) ||
-                                    (n.key === "tenders" &&
-                                        can("compliance.view")) ||
                                     (n.key === "backoffice" &&
                                         can("sales.view"))) &&
                                 p.modules.some(
@@ -678,7 +698,6 @@ export default function Workspace(p: Props) {
                                                     company: "administration",
                                                     modules: "administration",
                                                     audit: "administration",
-                                                    tenders: "administration",
                                                 } as Record<string, string>
                                             )[n.key] ?? n.key) && m.enabled,
                                 ),
@@ -1338,63 +1357,12 @@ export default function Workspace(p: Props) {
                     )}
                     {p.section === "company" && (
                         <>
-                            <div style={{ display: "flex", gap: "8px", borderBottom: "1px solid var(--line, #e2e8f0)", marginBottom: "16px", paddingBottom: "8px" }}>
-                                <button
-                                    type="button"
-                                    onClick={() => setCompanyTab("general")}
-                                    style={{
-                                        padding: "8px 16px",
-                                        fontSize: "13px",
-                                        fontWeight: 600,
-                                        borderRadius: "8px",
-                                        border: "1px solid transparent",
-                                        background: companyTab === "general" ? "var(--erp-accent, #1e293b)" : "transparent",
-                                        color: companyTab === "general" ? "#fff" : "inherit",
-                                        cursor: "pointer",
-                                    }}
-                                >
-                                    General Profile & Logo
-                                </button>
-                                {can("compliance.view") && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setCompanyTab("compliance")}
-                                        style={{
-                                            padding: "8px 16px",
-                                            fontSize: "13px",
-                                            fontWeight: 600,
-                                            borderRadius: "8px",
-                                            border: "1px solid transparent",
-                                            background: companyTab === "compliance" ? "var(--erp-accent, #1e293b)" : "transparent",
-                                            color: companyTab === "compliance" ? "#fff" : "inherit",
-                                            cursor: "pointer",
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            gap: "6px",
-                                        }}
-                                    >
-                                        <ShieldCheck size={16} /> Tender & Compliance Documents
-                                    </button>
-                                )}
-                            </div>
-                            {companyTab === "general" && (
-                                <>
-                                    <CompanyForm
-                                        company={p.company}
-                                        editable={can("company.configure")}
-                                    />
-                                    {can("company.configure") && (
-                                        <CompanyLogo logoUrl={p.company.logo_url} />
-                                    )}
-                                </>
-                            )}
-                            {companyTab === "compliance" && (
-                                <ComplianceCenter
-                                    initialData={p.compliance}
-                                    canManage={can("compliance.manage")}
-                                />
-                            )}
+                            <CompanyForm company={p.company} editable={can("company.configure")} />
+                            {can("company.configure") && <CompanyLogo logoUrl={p.company.logo_url} />}
                         </>
+                    )}
+                    {p.section === "compliance" && p.compliance && (
+                        <ComplianceCenter initialData={p.compliance} canManage={can("compliance.manage")} />
                     )}
                     {p.section === "tenders" && (
                         <TenderRegistry

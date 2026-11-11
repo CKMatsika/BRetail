@@ -56,7 +56,7 @@ Route::get('/inventory', [InventoryController::class, 'page'])->middleware(['aut
 Route::middleware(['auth', 'tenant'])->controller(WorkspaceController::class)->group(function () {
     Route::post('/company/logo', [CompanyLogoController::class, 'store'])->middleware('module:administration');
     Route::get('/company/logo', [CompanyLogoController::class, 'show']);
-    foreach (['dashboard' => 'dashboard', 'branches' => 'branches', 'team' => 'access', 'company' => 'administration', 'modules' => 'administration', 'audit' => 'administration', 'tenders' => 'administration'] as $section => $module) {
+    foreach (['dashboard' => 'dashboard', 'branches' => 'branches', 'team' => 'access', 'company' => 'administration', 'modules' => 'administration', 'audit' => 'administration', 'tenders' => 'tenders', 'compliance' => 'compliance'] as $section => $module) {
         Route::get('/'.$section, 'page')->defaults('section', $section)->middleware('module:'.$module);
     }
     Route::post('/branches', 'storeBranch')->middleware('module:branches');
@@ -67,7 +67,7 @@ Route::middleware(['auth', 'tenant'])->controller(WorkspaceController::class)->g
     Route::patch('/company', 'company')->middleware('module:administration');
 });
 
-Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\ComplianceController::class)->group(function () {
+Route::middleware(['auth', 'tenant', 'module:compliance'])->controller(\App\Http\Controllers\ComplianceController::class)->group(function () {
     Route::get('/compliance/data', 'data');
     Route::post('/compliance/store', 'store');
     Route::post('/compliance/mark-na', 'markNotApplicable');
@@ -75,7 +75,7 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\Complian
     Route::get('/compliance/history/{id}', 'history');
 });
 
-Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderController::class)->group(function () {
+Route::middleware(['auth', 'tenant', 'module:tenders'])->controller(\App\Http\Controllers\TenderController::class)->group(function () {
     Route::get('/tenders/data', 'data');
     Route::get('/tenders/{id}', 'show')->whereNumber('id');
     Route::post('/tenders', 'store');
@@ -86,7 +86,7 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderCo
     Route::delete('/tenders/documents/{documentId}', 'deleteDocument')->whereNumber('documentId');
 });
 
-Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderAnalysisController::class)->group(function () {
+Route::middleware(['auth', 'tenant', 'module:tenders'])->controller(\App\Http\Controllers\TenderAnalysisController::class)->group(function () {
     Route::get('/tenders/{tenderId}/analysis', 'getAnalysis')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/analysis/run', 'runAnalysis')->whereNumber('tenderId');
     Route::patch('/tenders/requirements/{requirementId}', 'updateRequirement')->whereNumber('requirementId');
@@ -94,7 +94,7 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderAn
     Route::delete('/tenders/requirements/{requirementId}', 'deleteRequirement')->whereNumber('requirementId');
 });
 
-Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderTechnicalSpecController::class)->group(function () {
+Route::middleware(['auth', 'tenant', 'module:tenders'])->controller(\App\Http\Controllers\TenderTechnicalSpecController::class)->group(function () {
     Route::get('/tenders/{tenderId}/technical-specs', 'index')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/technical-specs/generate', 'generate')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/technical-specs/bulk-import', 'bulkImport')->whereNumber('tenderId');
@@ -104,7 +104,7 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderTe
     Route::get('/tenders/{tenderId}/technical-specs/export', 'export')->whereNumber('tenderId');
 });
 
-Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderGapAnalysisController::class)->group(function () {
+Route::middleware(['auth', 'tenant', 'module:tenders'])->controller(\App\Http\Controllers\TenderGapAnalysisController::class)->group(function () {
     Route::get('/tenders/{tenderId}/gap-analysis', 'show')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/gap-analysis/evaluate', 'evaluate')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/gap-analysis/override', 'recordOverride')->whereNumber('tenderId');
@@ -112,7 +112,7 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderGa
     Route::get('/tenders/{tenderId}/gap-analysis/export', 'exportCsv')->whereNumber('tenderId');
 });
 
-Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderMilestoneController::class)->group(function () {
+Route::middleware(['auth', 'tenant', 'module:tenders'])->controller(\App\Http\Controllers\TenderMilestoneController::class)->group(function () {
     Route::get('/tenders/{tenderId}/milestones', 'index')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/milestones', 'store')->whereNumber('tenderId');
     Route::patch('/tenders/milestones/{milestoneId}', 'update')->whereNumber('milestoneId');
@@ -128,7 +128,7 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderMi
     Route::post('/tenders/alerts/dispatch-now', 'dispatchAlerts');
 });
 
-Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\BidStudioController::class)->group(function () {
+Route::middleware(['auth', 'tenant', 'module:tenders'])->controller(\App\Http\Controllers\BidStudioController::class)->group(function () {
     Route::get('/tenders/{tenderId}/bid-proposal', 'show')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/bid-proposal/generate-all', 'generateAll')->whereNumber('tenderId');
     Route::post('/tenders/bid-proposal/sections/{sectionId}/regenerate', 'regenerateSection')->whereNumber('sectionId');
@@ -139,7 +139,7 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\BidStudi
     Route::get('/tenders/{tenderId}/bid-proposal/export-doc', 'exportDoc')->whereNumber('tenderId');
 });
 
-Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderPricingController::class)->group(function () {
+Route::middleware(['auth', 'tenant', 'module:tenders'])->controller(\App\Http\Controllers\TenderPricingController::class)->group(function () {
     Route::get('/tenders/{tenderId}/pricing', 'show')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/pricing/items', 'storeItem')->whereNumber('tenderId');
     Route::patch('/tenders/pricing/items/{itemId}', 'updateItem')->whereNumber('itemId');
@@ -149,14 +149,14 @@ Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderPr
     Route::get('/tenders/{tenderId}/pricing/export-csv', 'exportCsv')->whereNumber('tenderId');
 });
 
-Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderSubmissionController::class)->group(function () {
+Route::middleware(['auth', 'tenant', 'module:tenders'])->controller(\App\Http\Controllers\TenderSubmissionController::class)->group(function () {
     Route::get('/tenders/{tenderId}/submissions', 'show')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/approvals', 'recordApproval')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/submissions', 'recordSubmission')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/opening-minutes', 'recordOpening')->whereNumber('tenderId');
 });
 
-Route::middleware(['auth', 'tenant'])->controller(\App\Http\Controllers\TenderAnalyticsController::class)->group(function () {
+Route::middleware(['auth', 'tenant', 'module:tenders'])->controller(\App\Http\Controllers\TenderAnalyticsController::class)->group(function () {
     Route::get('/tenders/analytics/dashboard', 'dashboard');
     Route::get('/tenders/{tenderId}/outcome', 'showOutcome')->whereNumber('tenderId');
     Route::post('/tenders/{tenderId}/outcome', 'recordOutcome')->whereNumber('tenderId');

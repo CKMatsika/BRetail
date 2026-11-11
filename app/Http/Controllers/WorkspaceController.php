@@ -45,13 +45,13 @@ class WorkspaceController
     public function page(Request $r, string $section = 'dashboard')
     {
         $permission = match ($section) {
-            'team' => 'users.view','devices' => 'devices.manage','company' => 'company.view','modules' => 'modules.view','audit' => 'audit.view','tenders' => 'compliance.view',default => "$section.view"
+            'team' => 'users.view','devices' => 'devices.manage','company' => 'company.view','modules' => 'modules.view','audit' => 'audit.view','tenders' => 'tenders.view','compliance' => 'compliance.view',default => "$section.view"
         };
         $this->permit($r, $permission);
         $company = Company::firstOrFail();
         $companyData = $r->user()->canDo('company.view') ? $company->toArray() : [...$company->only('name', 'industry', 'base_currency', 'accepted_currencies', 'logo_url'), 'settings' => []];
         $data = ['section' => $section, 'user' => $r->user()->only('id', 'name', 'email'), 'role' => $r->user()->role->name, 'permissions' => $r->user()->role->permissions, 'company' => $companyData, 'branches' => $this->branches($r)->with('warehouses')->get(), 'modules' => TenantModule::get()->map(fn ($m) => [...$m->toArray(), ...config("modules.$m->key")]), 'templates' => config('retail.templates')];
-        if (in_array($section, ['company', 'tenders'], true) && $r->user()->canDo('compliance.view')) {
+        if (in_array($section, ['compliance', 'tenders'], true) && $r->user()->canDo('compliance.view') && TenantModule::where('key', 'compliance')->where('enabled', true)->exists()) {
             $data['compliance'] = app(\App\Services\Compliance\ComplianceService::class)->list($r->user());
         }
         if ($section === 'tenders' && $r->user()->canDo('tenders.view')) {
@@ -163,7 +163,10 @@ class WorkspaceController
     public function company(Request $r)
     {
         $this->permit($r, 'company.configure');
-        $data = $r->validate(['name' => 'required|string|max:160', 'settings.registration' => 'nullable|string|max:120', 'settings.tax_id' => 'nullable|string|max:120', 'settings.vat_number' => 'nullable|string|max:120', 'settings.alternative_phone' => 'nullable|string|max:40', 'settings.banking_details' => 'nullable|string|max:2000', 'settings.phone' => 'nullable|string|max:40', 'settings.contact_email' => 'nullable|email|max:255', 'settings.address' => 'nullable|string|max:255', 'settings.receipt_footer' => 'nullable|string|max:255', 'settings.invoice_prefix' => 'required|alpha_dash|max:20']);
+        $data = $r->validate(['name' => 'required|string|max:160', 'settings.registration' => 'nullable|string|max:120', 'settings.tax_id' => 'nullable|string|max:120', 'settings.vat_number' => 'nullable|string|max:120', 'settings.alternative_phone' => 'nullable|string|max:40', 'settings.banking_details' => 'nullable|string|max:2000', 'settings.phone' => 'nullable|string|max:40', 'settings.contact_email' => 'nullable|email|max:255', 'settings.address' => 'nullable|string|max:255', 'settings.receipt_footer' => 'nullable|string|max:255', 'settings.invoice_prefix' => 'required|alpha_dash|max:20', 'settings.tax_rates' => 'sometimes|array|max:30', 'settings.tax_rates.*.name' => 'required|string|max:80', 'settings.tax_rates.*.rate' => 'required|numeric|between:0,100', 'settings.tax_rates.*.type' => 'required|in:standard,zero,exempt']);
+        if (isset($data['settings']['tax_rates'])) {
+            $data['settings']['tax_rates'] = array_values(array_map(fn ($tax) => [...$tax, 'rate' => in_array($tax['type'], ['zero', 'exempt'], true) ? 0 : $tax['rate']], $data['settings']['tax_rates']));
+        }
         DB::transaction(function () use ($data) {
             $company = Company::firstOrFail();
             $company->update(['name' => $data['name'], 'settings' => array_merge($company->settings, $data['settings'])]);
