@@ -2,6 +2,8 @@
 
 Enable **Payroll** after enabling Human resources and Accounting. Payroll setup is company controlled and salary amounts are hidden unless the user has `payroll.compensation.view`.
 
+Payroll is a separate sidebar module, not a tab inside People & HR. It appears when Payroll is enabled and the user has `payroll.view`; open **Modules** to enable it (Human resources and Accounting are required). People & HR also shows an **Open Payroll** shortcut when the module is available to the current user.
+
 ## Rule versions
 
 Create a source-linked rule version for the relevant currency and effective dates. The included 2026 Zimbabwe USD and ZWG templates are based on [ZIMRA's USD table](https://www.zimra.co.zw/?download=4523%3Ausd-paye-tax-tables-2026) and [ZWG table](https://www.zimra.co.zw/domestic-taxes/tax-tables?download=4522%3Azwg-paye-tax-tables-2026). A rule starts as a draft; a different user with `payroll.rules.approve` must review and approve it. Two approved rule sets for the same currency cannot cover overlapping effective dates.
@@ -13,6 +15,8 @@ Both templates leave NSSA parameters blank. NSSA currently publishes equal 4.5% 
 The employer APWCS industry rate is configured separately on each approved rule version. Enter the employer's NSSA-assigned industry code, rate and source confirmation; BRetail does not assume every employer has the same rate. APWCS is an employer cost and is not deducted from employee net pay. The calculation uses basic salary, applies no earnings ceiling, and automatically excludes civil servants and employees age 16 or younger; employees older than 65 remain eligible. Mixed runs use the assigned industry rate from the approved USD rule and calculate each currency's premium against its native-currency basic salary. Confirm the current APWCS base and assigned rate with NSSA before approval. POBS and APWCS eligibility are distinct: POBS exclusions and casual-worker coverage review do not automatically remove APWCS.
 
 ## Salary terms and monthly runs
+
+Each employee has an annual leave entitlement in working days/year (default 22, editable for NEC or contract terms). A payroll line snapshots this month's accrual as annual entitlement ÷ 12, prorated for a partial employment month. Approved runs update the People & HR Annual Leave balance; draft runs do not. Payslips and payroll register exports show accrual this payroll and year-to-date accrual. Annual leave approval is limited to accrued days. This is an employer-configured working-day policy; confirm the legal accrual start, applicable NEC rate and carryover/cap rules before use.
 
 Authorized payroll users can create branch-scoped employee monthly salary terms with currency and effective dates. Terms record base cash salary, recurring taxable cash earnings, noncash taxable benefits, allowable PAYE deductions, monthly tax credits, other cash deductions and a checked NSSA eligibility flag. Overlapping terms for the same employee are rejected; starting a new term closes an open term the day before its effective date. Amounts are confidential and excluded from ordinary audit event details.
 

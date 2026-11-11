@@ -81,6 +81,14 @@
         <tr class="net"><td>Net cash pay</td><td>{{ $run->currency }} {{ number_format((float) $line->net_pay, 2) }}</td></tr>
     </tbody></table>
     @endif
+    @if (isset($snapshot['annual_leave_accrual_days']))
+        <h2>Annual leave balance</h2>
+        <table><tbody>
+            <tr><td>Annual leave accrued this payroll</td><td>{{ number_format((float) $snapshot['annual_leave_accrual_days'], 2) }} working days</td></tr>
+            <tr><td>Annual leave accrued year to date</td><td>{{ number_format((float) $snapshot['annual_leave_cumulative_accrued_days'], 2) }} working days</td></tr>
+            <tr><td>Annual entitlement</td><td>{{ number_format((float) $snapshot['annual_leave_entitlement_days'], 2) }} working days per year</td></tr>
+        </tbody></table>
+    @endif
     <p class="muted">Prepared from approved payroll run {{ $run->id }}. Noncash benefits affect taxable income but are not paid as cash. This statement is confidential.</p>
 </main>
 </body>

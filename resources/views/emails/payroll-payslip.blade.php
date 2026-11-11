@@ -37,6 +37,14 @@
         <h2 style="font-size:16px;margin-top:24px">Effective-dated salary terms</h2>
         <ul>@foreach ($snapshot['salary_term_segments'] as $segment)<li>{{ $segment['effective_from'] }} – {{ $segment['effective_to'] }} · {{ $segment['payable_days'] }} days · {{ $run->currency }} {{ number_format((float) $segment['prorated_salary'], 2) }} base pay</li>@endforeach</ul>
     @endif
+    @if (isset($snapshot['annual_leave_accrual_days']))
+        <h2 style="font-size:16px;margin-top:24px">Annual leave balance</h2>
+        <table role="presentation" style="width:100%;border-collapse:collapse"><tbody>
+            <tr><td style="padding:9px;border-bottom:1px solid #e5e8eb">Accrued this payroll</td><td style="padding:9px;text-align:right;border-bottom:1px solid #e5e8eb">{{ number_format((float) $snapshot['annual_leave_accrual_days'], 2) }} working days</td></tr>
+            <tr><td style="padding:9px;border-bottom:1px solid #e5e8eb">Accrued year to date</td><td style="padding:9px;text-align:right;border-bottom:1px solid #e5e8eb">{{ number_format((float) $snapshot['annual_leave_cumulative_accrued_days'], 2) }} working days</td></tr>
+            <tr><td style="padding:9px;border-bottom:1px solid #e5e8eb">Annual entitlement</td><td style="padding:9px;text-align:right;border-bottom:1px solid #e5e8eb">{{ number_format((float) $snapshot['annual_leave_entitlement_days'], 2) }} working days/year</td></tr>
+        </tbody></table>
+    @endif
     <p style="margin-top:24px;color:#66717d;font-size:12px">This message contains confidential employment and pay information. If you received it in error, contact your employer and delete this message.</p>
 </main>
 </body>

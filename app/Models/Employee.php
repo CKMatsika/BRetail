@@ -11,6 +11,7 @@ class Employee extends TenantRecord
             'national_id_number' => 'encrypted', 'nssa_number' => 'encrypted', 'zimra_tin' => 'encrypted',
             'zimbabwean_citizen' => 'boolean', 'ordinarily_resident_zimbabwe' => 'boolean', 'blind' => 'boolean', 'physically_disabled' => 'boolean',
             'disabled_dependents_count' => 'integer',
+            'annual_leave_entitlement_days' => 'decimal:2',
         ];
     }
 

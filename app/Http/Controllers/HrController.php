@@ -51,6 +51,23 @@ class HrController
         return Branch::whereIn('id', $this->branchIds($request))->where('active', true)->pluck('id')->all();
     }
 
+    private function annualLeaveAccruedForYear(Employee $employee, int $year): float
+    {
+        $runs = PayrollRun::with(['lines' => fn ($query) => $query->where('employee_id', $employee->id), 'postings'])
+            ->where('status', 'approved')->whereYear('period_start', $year)
+            ->whereHas('lines', fn ($query) => $query->where('employee_id', $employee->id))->orderBy('period_start')->get();
+        $byMonth = [];
+        foreach ($runs as $run) {
+            if ($run->postings->contains('kind', 'reversal')) continue;
+            $line = $run->lines->first();
+            if (! $line) continue;
+            $days = $line->snapshot['annual_leave_accrual_days'] ?? null;
+            if ($days === null) $days = (float) $employee->annual_leave_entitlement_days / 12 * ((int) ($line->snapshot['payable_days'] ?? $run->period_start->daysInMonth) / max(1, (int) ($line->snapshot['period_days'] ?? $run->period_start->daysInMonth)));
+            $byMonth[$run->period_start->format('Y-m')] ??= (float) $days;
+        }
+        return array_sum($byMonth);
+    }
+
     private function payload(Request $request): array
     {
         $employees = $this->employees($request)->with('manager')->orderBy('employee_number')->get();
@@ -59,9 +76,26 @@ class HrController
         $years = collect([now()->year, ...$leaveRequests->map(fn ($leave) => $leave->start_date->year)])->unique()->sort()->values();
         $types = LeaveType::where('active', true)->orderBy('name')->get();
         $approvedDays = LeaveRequest::whereIn('employee_id', $employeeIds)->where('status', 'approved')->whereBetween('start_date', [$years->first().'-01-01', $years->last().'-12-31'])->get()->groupBy(fn ($row) => $row->employee_id.':'.$row->leave_type_id.':'.$row->start_date->year)->map(fn ($rows) => (float) $rows->sum('days'));
+        $annualAccrualByPeriod = [];
+        $approvedPayrollRuns = PayrollRun::with(['lines' => fn ($query) => $query->whereIn('employee_id', $employeeIds), 'postings'])
+            ->where('status', 'approved')->whereBetween('period_start', [$years->first().'-01-01', $years->last().'-12-31'])
+            ->whereHas('lines', fn ($query) => $query->whereIn('employee_id', $employeeIds))->get();
+        foreach ($approvedPayrollRuns as $run) {
+            if ($run->postings->contains('kind', 'reversal')) continue;
+            foreach ($run->lines as $line) {
+                $days = $line->snapshot['annual_leave_accrual_days'] ?? null;
+                if ($days === null) {
+                    $employee = $employees->firstWhere('id', $line->employee_id);
+                    if (! $employee) continue;
+                    $days = (float) $employee->annual_leave_entitlement_days / 12 * ((int) ($line->snapshot['payable_days'] ?? $run->period_start->daysInMonth) / max(1, (int) ($line->snapshot['period_days'] ?? $run->period_start->daysInMonth)));
+                }
+                $key = $line->employee_id.':'.$run->period_start->format('Y-m');
+                $annualAccrualByPeriod[$key] ??= ['year' => $run->period_start->year, 'days' => (string) $days];
+            }
+        }
         return [
             'employees' => $employees->map(fn (Employee $e) => [
-                ...$e->only('id', 'employee_number', 'legal_name', 'preferred_name', 'email', 'phone', 'job_title', 'status'),
+                ...$e->only('id', 'employee_number', 'legal_name', 'preferred_name', 'email', 'phone', 'job_title', 'status', 'employee_group', 'job_grade', 'annual_leave_entitlement_days'),
                 'branch_id' => $e->branch_id, 'branch' => $e->branch?->name, 'manager_id' => $e->manager_id, 'manager' => $e->manager?->preferred_name ?: $e->manager?->legal_name,
                 'start_date' => $e->start_date?->toDateString(), 'end_date' => $e->end_date?->toDateString(),
                 ...($request->user()->canDo('hr.personal.view') ? [
@@ -76,11 +110,13 @@ class HrController
             'branches' => Branch::whereIn('id', $this->branchIds($request))->where('active', true)->orderBy('name')->get(['id', 'name']),
             'leave_types' => $types,
             'leave_requests' => $leaveRequests->map(fn ($l) => [...$l->only('id', 'days', 'reason', 'status', 'decision_note', 'created_at'), 'start_date' => $l->start_date->toDateString(), 'end_date' => $l->end_date->toDateString(), 'employee' => $l->employee?->legal_name, 'employee_number' => $l->employee?->employee_number, 'leave_type' => $l->leaveType?->name, 'requested_by' => $l->requested_by]),
-            'leave_balances' => $employees->flatMap(fn (Employee $employee) => $types->flatMap(fn ($type) => $years->map(function ($year) use ($employee, $type, $approvedDays) {
+            'leave_balances' => $employees->flatMap(fn (Employee $employee) => $types->flatMap(fn ($type) => $years->map(function ($year) use ($employee, $type, $approvedDays, $annualAccrualByPeriod) {
                 $used = $approvedDays[$employee->id.':'.$type->id.':'.$year] ?? 0;
-                return ['id' => $employee->id.'-'.$type->id.'-'.$year, 'employee' => $employee->preferred_name ?: $employee->legal_name, 'employee_number' => $employee->employee_number, 'name' => $type->name, 'year' => $year, 'entitlement' => (float) $type->annual_entitlement, 'used' => $used, 'remaining' => (float) $type->annual_entitlement - $used, 'paid' => $type->paid];
+                $isAnnualLeave = mb_strtolower(trim($type->name)) === 'annual leave';
+                $accrued = $isAnnualLeave ? collect($annualAccrualByPeriod)->filter(fn ($row, $key) => str_starts_with($key, $employee->id.':') && $row['year'] === $year)->sum(fn ($row) => (float) $row['days']) : (float) $type->annual_entitlement;
+                return ['id' => $employee->id.'-'.$type->id.'-'.$year, 'employee' => $employee->preferred_name ?: $employee->legal_name, 'employee_number' => $employee->employee_number, 'name' => $type->name, 'year' => $year, 'entitlement' => $isAnnualLeave ? (float) $employee->annual_leave_entitlement_days : (float) $type->annual_entitlement, 'accrued' => $isAnnualLeave ? $accrued : (float) $type->annual_entitlement, 'used' => $used, 'remaining' => max(0, $accrued - $used), 'paid' => $type->paid];
             }))),
-            'can' => ['create' => $request->user()->canDo('hr.create'), 'edit' => $request->user()->canDo('hr.edit'), 'personal_manage' => $request->user()->canDo('hr.personal.manage'), 'nssa_export' => $request->user()->canDo('hr.personal.view') && $request->user()->canDo('payroll.compensation.view') && $request->user()->canDo('payroll.runs.export') && TenantModule::where('key', 'payroll')->where('enabled', true)->exists(), 'history' => $request->user()->canDo('hr.history.view'), 'leave_manage' => $request->user()->canDo('hr.leave.manage'), 'leave_request' => $request->user()->canDo('hr.leave.request'), 'leave_approve' => $request->user()->canDo('hr.leave.approve')],
+            'can' => ['create' => $request->user()->canDo('hr.create'), 'edit' => $request->user()->canDo('hr.edit'), 'personal_manage' => $request->user()->canDo('hr.personal.manage'), 'payroll_view' => $request->user()->canDo('payroll.view') && TenantModule::where('key', 'payroll')->where('enabled', true)->exists(), 'payroll_enabled' => TenantModule::where('key', 'payroll')->where('enabled', true)->exists(), 'modules_configure' => $request->user()->canDo('modules.configure'), 'modules_view' => $request->user()->canDo('modules.view'), 'nssa_export' => $request->user()->canDo('hr.personal.view') && $request->user()->canDo('payroll.compensation.view') && $request->user()->canDo('payroll.runs.export') && TenantModule::where('key', 'payroll')->where('enabled', true)->exists(), 'history' => $request->user()->canDo('hr.history.view'), 'leave_manage' => $request->user()->canDo('hr.leave.manage'), 'leave_request' => $request->user()->canDo('hr.leave.request'), 'leave_approve' => $request->user()->canDo('hr.leave.approve')],
             'viewer_id' => $request->user()->id,
         ];
     }
@@ -184,15 +220,17 @@ class HrController
             'manager_id' => ['nullable', 'integer'],
             'legal_name' => 'required|string|max:160', 'preferred_name' => 'nullable|string|max:120', 'email' => 'nullable|email|max:255',
             'phone' => 'nullable|string|max:60', 'job_title' => 'required|string|max:120', 'start_date' => 'required|date',
+            'employee_group' => ['nullable', Rule::in(['nec', 'general', 'management'])], 'job_grade' => 'nullable|string|max:80', 'annual_leave_entitlement_days' => 'required|numeric|min:0|max:366',
             'effective_date' => 'required|date|after_or_equal:start_date',
         ]);
         if ($request->user()->canDo('hr.personal.manage')) {
             $data = [...$data, ...$request->validate($this->personalDataRules())];
         }
+        if (($data['employee_group'] ?? null) === 'management') $data['job_grade'] = null;
         $this->validateManager($request, isset($data['manager_id']) ? (int) $data['manager_id'] : null, (int) $data['branch_id']);
         $employee = DB::transaction(function () use ($data) {
             $employee = Employee::create(collect($data)->except('effective_date')->all());
-            EmploymentEvent::create(['employee_id' => $employee->id, 'actor_id' => auth()->id(), 'kind' => 'created', 'effective_date' => $data['effective_date'], 'snapshot' => $employee->only('employee_number', 'branch_id', 'manager_id', 'legal_name', 'preferred_name', 'email', 'phone', 'job_title', 'status', 'start_date', 'end_date'), 'created_at' => now()]);
+            EmploymentEvent::create(['employee_id' => $employee->id, 'actor_id' => auth()->id(), 'kind' => 'created', 'effective_date' => $data['effective_date'], 'snapshot' => $employee->only('employee_number', 'branch_id', 'manager_id', 'legal_name', 'preferred_name', 'email', 'phone', 'job_title', 'status', 'start_date', 'end_date', 'employee_group', 'job_grade', 'annual_leave_entitlement_days'), 'created_at' => now()]);
             Audit::record('hr.employee.created', (string) $employee->id, ['employee_number' => $employee->employee_number, 'branch_id' => $employee->branch_id]);
             if (collect(['date_of_birth', 'national_id_number', 'nssa_number', 'zimra_tin', 'nationality', 'zimbabwean_citizen', 'ordinarily_resident_zimbabwe', 'employment_category', 'paye_non_fds_reason', 'marital_status', 'blind', 'physically_disabled', 'disabled_dependents_count'])->contains(fn ($key) => filled($employee->{$key}))) {
                 Audit::record('hr.employee.personal_data_updated', (string) $employee->id, ['fields' => ['initial_compliance_profile']]);
@@ -211,11 +249,13 @@ class HrController
             'branch_id' => ['required', 'integer', Rule::in($this->activeBranchIds($request))], 'manager_id' => ['nullable', 'integer'], 'legal_name' => 'required|string|max:160',
             'preferred_name' => 'nullable|string|max:120', 'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:60',
             'job_title' => 'required|string|max:120', 'status' => ['required', Rule::in(['active', 'on_leave', 'terminated'])],
+            'employee_group' => ['sometimes', 'nullable', Rule::in(['nec', 'general', 'management'])], 'job_grade' => 'sometimes|nullable|string|max:80', 'annual_leave_entitlement_days' => 'sometimes|required|numeric|min:0|max:366',
             'start_date' => 'required|date', 'end_date' => 'nullable|date|after_or_equal:start_date', 'effective_date' => 'required|date|after_or_equal:start_date',
         ]);
         if ($request->user()->canDo('hr.personal.manage')) {
             $data = [...$data, ...$request->validate($this->personalDataRules())];
         }
+        if (($data['employee_group'] ?? $employee->employee_group) === 'management') $data['job_grade'] = null;
         if ($data['status'] === 'terminated' && empty($data['end_date'])) {
             throw ValidationException::withMessages(['end_date' => 'Enter the final employment date before offboarding.']);
         }
@@ -238,7 +278,7 @@ class HrController
                 throw ValidationException::withMessages(['status' => 'A terminated employee cannot be reactivated. Create an authorized correction instead.']);
             }
             $employee->update($data);
-            EmploymentEvent::create(['employee_id' => $employee->id, 'actor_id' => auth()->id(), 'kind' => $employee->status === 'terminated' ? 'offboarded' : 'changed', 'effective_date' => $effectiveDate, 'snapshot' => $employee->only('employee_number', 'branch_id', 'manager_id', 'legal_name', 'preferred_name', 'email', 'phone', 'job_title', 'status', 'start_date', 'end_date'), 'created_at' => now()]);
+            EmploymentEvent::create(['employee_id' => $employee->id, 'actor_id' => auth()->id(), 'kind' => $employee->status === 'terminated' ? 'offboarded' : 'changed', 'effective_date' => $effectiveDate, 'snapshot' => $employee->only('employee_number', 'branch_id', 'manager_id', 'legal_name', 'preferred_name', 'email', 'phone', 'job_title', 'status', 'start_date', 'end_date', 'employee_group', 'job_grade', 'annual_leave_entitlement_days'), 'created_at' => now()]);
             Audit::record('hr.employee.updated', (string) $employee->id, ['effective_date' => $effectiveDate, 'status' => $employee->status]);
             if ($personalChanged) Audit::record('hr.employee.personal_data_updated', (string) $employee->id, ['fields' => $personalChanged, 'date_of_birth_changed' => $birthDateChanged]);
         });
@@ -324,10 +364,11 @@ class HrController
             if ($leave->status !== 'pending') throw ValidationException::withMessages(['decision' => 'This request has already been decided.']);
             if ($leave->requested_by === $request->user()->id) throw ValidationException::withMessages(['decision' => 'The requester cannot approve or reject their own leave request.']);
             if ($data['decision'] === 'approved') {
-                Employee::whereKey($leave->employee_id)->lockForUpdate()->firstOrFail();
+                $employee = Employee::whereKey($leave->employee_id)->lockForUpdate()->firstOrFail();
                 $type = LeaveType::findOrFail($leave->leave_type_id);
                 $used = (float) LeaveRequest::where('employee_id', $leave->employee_id)->where('leave_type_id', $type->id)->where('status', 'approved')->whereYear('start_date', $leave->start_date->year)->sum('days');
-                if ($used + (float) $leave->days > (float) $type->annual_entitlement) throw ValidationException::withMessages(['decision' => 'Approving this request would exceed the configured annual leave entitlement.']);
+                $limit = mb_strtolower(trim($type->name)) === 'annual leave' ? $this->annualLeaveAccruedForYear($employee, $leave->start_date->year) : (float) $type->annual_entitlement;
+                if ($used + (float) $leave->days > $limit) throw ValidationException::withMessages(['decision' => 'Approving this request would exceed the employee’s accrued leave balance.']);
             }
             $leave->update(['status' => $data['decision'], 'decided_by' => $request->user()->id, 'decided_at' => now(), 'decision_note' => $data['decision_note'] ?? null]);
             Audit::record('hr.leave.'.$data['decision'], (string) $leave->id, ['employee_id' => $leave->employee_id, 'days' => $leave->days]);
