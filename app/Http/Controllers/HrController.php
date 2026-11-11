@@ -188,7 +188,7 @@ class HrController
         $this->validateManager($request, isset($data['manager_id']) ? (int) $data['manager_id'] : null, (int) $data['branch_id']);
         $employee = DB::transaction(function () use ($data) {
             $employee = Employee::create(collect($data)->except('effective_date')->all());
-            EmploymentEvent::create(['employee_id' => $employee->id, 'actor_id' => auth()->id(), 'kind' => 'created', 'effective_date' => $data['effective_date'], 'snapshot' => $employee->only('employee_number', 'branch_id', 'manager_id', 'legal_name', 'preferred_name', 'email', 'phone', 'job_title', 'status', 'start_date', 'end_date')]);
+            EmploymentEvent::create(['employee_id' => $employee->id, 'actor_id' => auth()->id(), 'kind' => 'created', 'effective_date' => $data['effective_date'], 'snapshot' => $employee->only('employee_number', 'branch_id', 'manager_id', 'legal_name', 'preferred_name', 'email', 'phone', 'job_title', 'status', 'start_date', 'end_date'), 'created_at' => now()]);
             Audit::record('hr.employee.created', (string) $employee->id, ['employee_number' => $employee->employee_number, 'branch_id' => $employee->branch_id]);
             if (collect(['date_of_birth', 'national_id_number', 'nssa_number', 'zimra_tin', 'nationality', 'zimbabwean_citizen', 'ordinarily_resident_zimbabwe', 'employment_category', 'paye_non_fds_reason', 'marital_status', 'blind', 'physically_disabled', 'disabled_dependents_count'])->contains(fn ($key) => filled($employee->{$key}))) {
                 Audit::record('hr.employee.personal_data_updated', (string) $employee->id, ['fields' => ['initial_compliance_profile']]);
@@ -234,7 +234,7 @@ class HrController
                 throw ValidationException::withMessages(['status' => 'A terminated employee cannot be reactivated. Create an authorized correction instead.']);
             }
             $employee->update($data);
-            EmploymentEvent::create(['employee_id' => $employee->id, 'actor_id' => auth()->id(), 'kind' => $employee->status === 'terminated' ? 'offboarded' : 'changed', 'effective_date' => $effectiveDate, 'snapshot' => $employee->only('employee_number', 'branch_id', 'manager_id', 'legal_name', 'preferred_name', 'email', 'phone', 'job_title', 'status', 'start_date', 'end_date')]);
+            EmploymentEvent::create(['employee_id' => $employee->id, 'actor_id' => auth()->id(), 'kind' => $employee->status === 'terminated' ? 'offboarded' : 'changed', 'effective_date' => $effectiveDate, 'snapshot' => $employee->only('employee_number', 'branch_id', 'manager_id', 'legal_name', 'preferred_name', 'email', 'phone', 'job_title', 'status', 'start_date', 'end_date'), 'created_at' => now()]);
             Audit::record('hr.employee.updated', (string) $employee->id, ['effective_date' => $effectiveDate, 'status' => $employee->status]);
             if ($personalChanged) Audit::record('hr.employee.personal_data_updated', (string) $employee->id, ['fields' => $personalChanged, 'date_of_birth_changed' => $birthDateChanged]);
         });
