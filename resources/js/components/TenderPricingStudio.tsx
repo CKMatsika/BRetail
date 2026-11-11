@@ -26,6 +26,9 @@ import {
     Lock,
     Unlock,
     Info,
+    Search,
+    Globe,
+    Upload,
 } from "lucide-react";
 
 export type PricingItem = {
@@ -42,7 +45,13 @@ export type PricingItem = {
     total_selling_price: number;
     notes: string | null;
     order_index: number;
+    source_type?: "inventory" | "supplier_quote" | "web" | null;
+    source_label?: string | null;
+    source_url?: string | null;
+    source_verified_at?: string | null;
 };
+
+type PriceSource = {id:number;pricing_item_id:number;source_type:"inventory"|"supplier_quote"|"web";source_label:string;unit_cost:string;currency:string;source_url:string|null;confidence:number|null;match_reason:string|null;status:"pending"|"approved"|"rejected";created_at:string};
 
 export type PricingEstimate = {
     id: number;
@@ -134,10 +143,11 @@ export type FinancialSummary = {
 
 type TenderPricingStudioProps = {
     tenderId: number;
+    canManage: boolean;
     onClose: () => void;
 };
 
-export default function TenderPricingStudio({ tenderId, onClose }: TenderPricingStudioProps) {
+export default function TenderPricingStudio({ tenderId, canManage, onClose }: TenderPricingStudioProps) {
     const [estimate, setEstimate] = useState<PricingEstimate | null>(null);
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [tender, setTender] = useState<any>(null);
@@ -167,6 +177,12 @@ export default function TenderPricingStudio({ tenderId, onClose }: TenderPricing
 
     // Settings form state
     const [settingsForm, setSettingsForm] = useState<any>({});
+    const [sources, setSources] = useState<PriceSource[]>([]);
+    const [sourceItem, setSourceItem] = useState<PricingItem|null>(null);
+    const [loadingSources, setLoadingSources] = useState(false);
+    const [searchingWeb, setSearchingWeb] = useState(false);
+    const [uploadingQuote, setUploadingQuote] = useState(false);
+    const [sourceMessage, setSourceMessage] = useState("");
 
     useEffect(() => {
         fetchPricingData();
@@ -179,6 +195,7 @@ export default function TenderPricingStudio({ tenderId, onClose }: TenderPricing
             setEstimate(res.data.estimate);
             setSummary(res.data.summary);
             setTender(res.data.tender);
+            setSources(res.data.sources || []);
 
             // initialize settings form
             const est = res.data.estimate;
@@ -205,6 +222,49 @@ export default function TenderPricingStudio({ tenderId, onClose }: TenderPricing
         } finally {
             setLoading(false);
         }
+    };
+
+    const openSources = async (item: PricingItem) => {
+        setSourceItem(item);
+        setSourceMessage("");
+        setLoadingSources(true);
+        try {
+            const res = await axios.get(`/tenders/${tenderId}/pricing/items/${item.id}/inventory-sources`);
+            setSources((old) => [...old.filter(s=>s.pricing_item_id!==item.id||s.status!=="pending"),...(res.data.sources||[])]);
+        } catch (err:any) { setSourceMessage(err.response?.data?.message || "Could not match inventory items."); }
+        finally { setLoadingSources(false); }
+    };
+
+    const searchWebPrices = async () => {
+        if (!sourceItem) return;
+        try {
+            setSearchingWeb(true); setSourceMessage("Searching for current public listings. Results require your review.");
+            const res=await axios.post(`/tenders/${tenderId}/pricing/items/${sourceItem.id}/web-sources`);
+            setSources(old=>[...old.filter(s=>s.pricing_item_id!==sourceItem.id||s.status!=="pending"),...(res.data.sources||[])]);
+            setSourceMessage(res.data.sources?.length ? `Found ${res.data.sources.length} web price suggestion(s). Confirm the listing, unit and tax basis before accepting.` : "No verified current price listing was returned. Add a supplier quote or enter a cost manually.");
+        } catch(err:any) { setSourceMessage(err.response?.data?.errors?.ai?.[0] || err.response?.data?.message || "Web price search failed."); }
+        finally { setSearchingWeb(false); }
+    };
+
+    const uploadSupplierQuote = async (file?:File) => {
+        if(!file||!sourceItem)return;
+        try {
+            setUploadingQuote(true); setSourceMessage("Uploading and reading supplier quote…");
+            const form=new FormData(); form.append("file",file); form.append("pricing_item_id",String(sourceItem.id));
+            const res=await axios.post(`/tenders/${tenderId}/pricing/supplier-quotes`,form,{headers:{"Content-Type":"multipart/form-data"}});
+            setSources(old=>[...old,...(res.data.sources||[])]); setSourceMessage(res.data.message||"Supplier quote uploaded.");
+        } catch(err:any) { setSourceMessage(err.response?.data?.message||"Could not process this supplier quote."); }
+        finally { setUploadingQuote(false); }
+    };
+
+    const reviewPriceSource = async (source:PriceSource, decision:"approve"|"reject") => {
+        try {
+            const res=await axios.patch(`/tenders/${tenderId}/pricing/sources/${source.id}`,{decision});
+            setSources(old=>old.map(s=>s.id===source.id?res.data.source:s));
+            if(res.data.estimate)setEstimate(res.data.estimate);
+            if(res.data.summary)setSummary(res.data.summary);
+            if(decision==="approve")setSourceMessage("Source approved. Direct cost and tender totals have been updated.");
+        } catch(err:any) { const errors=err.response?.data?.errors; setSourceMessage((errors?Object.values(errors).flat()[0]:null) || err.response?.data?.message || "Could not review this price source."); }
     };
 
     const handleSaveSettings = async () => {
@@ -375,7 +435,7 @@ export default function TenderPricingStudio({ tenderId, onClose }: TenderPricing
                             <span>Export BOQ CSV</span>
                         </a>
 
-                        {estimate?.status !== "approved" && (
+                        {canManage && estimate?.status !== "approved" && (
                             <button
                                 onClick={() => setSignOffModalOpen(true)}
                                 className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-xs transition"
@@ -534,13 +594,13 @@ export default function TenderPricingStudio({ tenderId, onClose }: TenderPricing
                                 <option value="overheads">Overheads</option>
                             </select>
 
-                            <button
+                            {canManage && <button
                                 onClick={handleOpenAddItem}
                                 className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-sm transition"
                             >
                                 <Plus className="w-3.5 h-3.5" />
                                 <span>Add Line Item</span>
-                            </button>
+                            </button>}
                         </div>
                     )}
                 </div>
@@ -591,6 +651,7 @@ export default function TenderPricingStudio({ tenderId, onClose }: TenderPricing
                                                         {item.notes && (
                                                             <div className="text-xs text-gray-400 mt-0.5">{item.notes}</div>
                                                         )}
+                                                        {item.source_label && <div className="mt-1 text-[11px] text-emerald-700">Cost source: {item.source_label}{item.source_verified_at ? ` · confirmed ${new Date(item.source_verified_at).toLocaleDateString()}` : ""}</div>}
                                                     </td>
                                                     <td className="py-3 px-4">
                                                         <span className="capitalize text-xs px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md font-medium">
@@ -617,20 +678,21 @@ export default function TenderPricingStudio({ tenderId, onClose }: TenderPricing
                                                     </td>
                                                     <td className="py-3 px-4 text-center">
                                                         <div className="flex items-center justify-center space-x-2">
-                                                            <button
+                                                            {canManage && <button onClick={() => openSources(item)} className="p-1 text-gray-400 hover:text-blue-600 rounded transition" title="Find inventory, supplier quote or web prices"><Search className="w-4 h-4" /></button>}
+                                                            {canManage && <button
                                                                 onClick={() => handleOpenEditItem(item)}
                                                                 className="p-1 text-gray-400 hover:text-emerald-600 rounded transition"
                                                                 title="Edit line item"
                                                             >
                                                                 <Edit3 className="w-4 h-4" />
-                                                            </button>
-                                                            <button
+                                                            </button>}
+                                                            {canManage && <button
                                                                 onClick={() => handleDeleteItem(item.id)}
                                                                 className="p-1 text-gray-400 hover:text-rose-600 rounded transition"
                                                                 title="Delete line item"
                                                             >
                                                                 <Trash2 className="w-4 h-4" />
-                                                            </button>
+                                                            </button>}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -1057,6 +1119,27 @@ export default function TenderPricingStudio({ tenderId, onClose }: TenderPricing
                         </div>
                     )}
                 </div>
+
+                {sourceItem && (
+                    <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={()=>setSourceItem(null)}>
+                        <section className="bg-white rounded-2xl p-6 max-w-4xl w-full max-h-[88vh] overflow-y-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
+                            <div className="flex items-start justify-between gap-4"><div><span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Cost sourcing · {sourceItem.item_code}</span><h3 className="text-lg font-bold text-gray-900 mt-1">{sourceItem.description}</h3><p className="text-xs text-gray-500 mt-1">Check specification, unit and price basis before applying a source.</p></div><button onClick={()=>setSourceItem(null)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5"/></button></div>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                <button disabled={loadingSources} onClick={()=>openSources(sourceItem)} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-xs font-semibold disabled:opacity-50"><Search size={15}/>{loadingSources?"Matching…":"Match inventory"}</button>
+                                <button disabled={searchingWeb} onClick={searchWebPrices} className="flex items-center gap-2 px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"><Globe size={15}/>{searchingWeb?"Searching…":"Search web prices"}</button>
+                                <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-xs font-semibold cursor-pointer hover:bg-gray-50"><Upload size={15}/>{uploadingQuote?"Reading quote…":"Upload supplier quote"}<input type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png" disabled={uploadingQuote} onChange={e=>{void uploadSupplierQuote(e.target.files?.[0]);e.currentTarget.value=""}}/></label>
+                            </div>
+                            {sourceMessage&&<div className="mt-3 p-3 rounded-lg bg-blue-50 border border-blue-100 text-xs text-blue-900" role="status">{sourceMessage}</div>}
+                            <div className="mt-5 space-y-3">
+                                {sources.filter(s=>s.pricing_item_id===sourceItem.id).length===0?<p className="p-5 text-center text-sm text-gray-500 bg-gray-50 rounded-xl">No price suggestions yet. Match inventory, upload a quote or search the web.</p>:sources.filter(s=>s.pricing_item_id===sourceItem.id).map(s=><article key={s.id} className={`p-4 rounded-xl border ${s.status==="approved"?"border-emerald-200 bg-emerald-50/40":s.status==="rejected"?"border-gray-200 bg-gray-50 opacity-70":"border-amber-200 bg-amber-50/30"}`}>
+                                    <div className="flex flex-wrap justify-between gap-3"><div className="min-w-0"><div className="flex items-center gap-2"><strong className="text-sm text-gray-900">{s.source_label}</strong><span className="text-[10px] uppercase px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600">{s.source_type.replace("_"," ")}</span><span className="text-[10px] uppercase px-2 py-0.5 rounded-full bg-white border border-gray-200">{s.status}</span></div><p className="text-xs text-gray-600 mt-1">{s.match_reason}</p>{s.source_url&&<a className="inline-block mt-1 text-xs text-blue-700 underline break-all" href={s.source_url} target="_blank" rel="noopener noreferrer">{s.source_type==="web"?"Open source listing":s.source_type==="supplier_quote"?"View uploaded quotation":"Inventory item"}</a>}</div><div className="text-right"><strong className="font-mono text-base">{s.currency} {Number(s.unit_cost).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:4})}</strong><div className="text-[11px] text-gray-500">{s.confidence!==null?`Match confidence ${s.confidence}% · `:""}{new Date(s.created_at).toLocaleDateString()}</div></div></div>
+                                    {canManage&&s.status==="pending"&&<div className="mt-3 flex justify-end gap-2"><button onClick={()=>reviewPriceSource(s,"reject")} className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-semibold">Reject</button><button onClick={()=>reviewPriceSource(s,"approve")} className="px-3 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-semibold">Confirm and use cost</button></div>}
+                                </article>)}
+                            </div>
+                            <p className="mt-4 text-[11px] text-gray-500">Web search uses the configured Gemini API and Google Search grounding; provider charges may apply. Web prices are indicative and may be stale or exclude delivery, tax, customs and local availability. Confirm terms with the source before approval.</p>
+                        </section>
+                    </div>
+                )}
 
                 {/* MODAL: ADD / EDIT BOQ LINE ITEM */}
                 {itemModalOpen && (

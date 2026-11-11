@@ -18,6 +18,7 @@ class TenderPricingItem extends TenantRecord
             'unit_price' => 'decimal:4',
             'total_price' => 'decimal:2',
             'order_index' => 'integer',
+            'source_verified_at' => 'datetime',
         ];
     }
 

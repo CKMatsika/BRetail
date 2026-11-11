@@ -2558,6 +2558,7 @@ export default function TenderRegistry({
             {pricingStudioTender && (
                 <TenderPricingStudio
                     tenderId={pricingStudioTender.id}
+                    canManage={canManage}
                     onClose={() => setPricingStudioTender(null)}
                 />
             )}

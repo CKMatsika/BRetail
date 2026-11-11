@@ -219,6 +219,7 @@ class TenderPricingService
             'unit_price' => $unitPrice,
             'total_price' => $totalPrice,
             'order_index' => $orderIndex,
+            'notes' => $data['notes'] ?? null,
         ]);
     }
 
@@ -235,6 +236,9 @@ class TenderPricingService
         $unitPrice = round($cost * (1 + ($markup / 100)), 4);
         $totalPrice = round($qty * $unitPrice, 2);
 
+        $sourceStillApplies = (!isset($data['unit_cost']) || round((float)$data['unit_cost'],4) === round((float)$item->unit_cost,4))
+            && (!isset($data['description']) || $data['description'] === $item->description)
+            && (!isset($data['unit_of_measure']) || $data['unit_of_measure'] === $item->unit_of_measure);
         $item->update([
             'item_number' => $data['item_number'] ?? $item->item_number,
             'category' => $data['category'] ?? $item->category,
@@ -247,6 +251,8 @@ class TenderPricingService
             'unit_price' => $unitPrice,
             'total_price' => $totalPrice,
             'order_index' => $data['order_index'] ?? $item->order_index,
+            'notes' => $data['notes'] ?? $item->notes,
+            ...($sourceStillApplies ? [] : ['source_type'=>null,'source_label'=>null,'source_url'=>null,'source_document_id'=>null,'inventory_variant_id'=>null,'source_verified_at'=>null]),
         ]);
 
         return $item;
@@ -260,66 +266,29 @@ class TenderPricingService
         $item->delete();
     }
 
-    /**
-     * Seed initial sample BOQ items based on tender specifications or scope.
-     */
+    /** Seed unrated technical requirements; never invent a starting price. */
     protected function seedInitialBoqItems(TenderPricingEstimate $estimate, Tender $tender): void
     {
         $techSpecs = TenderTechnicalSpec::where('tender_id', $tender->id)->get();
 
-        if ($techSpecs->isNotEmpty()) {
-            foreach ($techSpecs->take(6) as $idx => $spec) {
-                $qty = 1;
-                $cost = 5000.00;
+        foreach ($techSpecs as $idx => $spec) {
                 $markup = (float) $estimate->target_margin_percent;
-                $unitPrice = round($cost * (1 + ($markup / 100)), 4);
 
                 TenderPricingItem::create([
                     'tenant_id' => $estimate->tenant_id,
                     'tender_pricing_estimate_id' => $estimate->id,
                     'item_number' => (string) ($idx + 1) . '.01',
                     'category' => 'equipment',
-                    'description' => $spec->title . ' (' . ($spec->bidder_offered_specification ?: 'Standard specification conforming to RFP') . ')',
+                    'description' => $spec->title . ' — ' . $spec->original_specification,
                     'unit_of_measure' => 'unit',
-                    'quantity' => $qty,
-                    'unit_cost' => $cost,
-                    'subtotal_cost' => $cost,
+                    'quantity' => 1,
+                    'unit_cost' => 0,
+                    'subtotal_cost' => 0,
                     'markup_percent' => $markup,
-                    'unit_price' => $unitPrice,
-                    'total_price' => $unitPrice,
+                    'unit_price' => 0,
+                    'total_price' => 0,
                     'order_index' => $idx + 1,
                 ]);
-            }
-        } else {
-            // General goods / services default items
-            $defaults = [
-                ['cat' => 'materials', 'desc' => 'Primary equipment & hardware supply per tender specification', 'qty' => 1, 'cost' => 45000.00],
-                ['cat' => 'logistics', 'desc' => 'Multimodal transit freight, handling, and insurance to site', 'qty' => 1, 'cost' => 3500.00],
-                ['cat' => 'labour', 'desc' => 'Engineering testing, installation, and site acceptance commissioning', 'qty' => 1, 'cost' => 4000.00],
-                ['cat' => 'preliminaries', 'desc' => 'Warranty buffer, documentation, and staff operational training', 'qty' => 1, 'cost' => 1500.00],
-            ];
-
-            foreach ($defaults as $idx => $def) {
-                $cost = $def['cost'];
-                $markup = (float) $estimate->target_margin_percent;
-                $unitPrice = round($cost * (1 + ($markup / 100)), 4);
-
-                TenderPricingItem::create([
-                    'tenant_id' => $estimate->tenant_id,
-                    'tender_pricing_estimate_id' => $estimate->id,
-                    'item_number' => '1.0' . ($idx + 1),
-                    'category' => $def['cat'],
-                    'description' => $def['desc'],
-                    'unit_of_measure' => 'lot',
-                    'quantity' => $def['qty'],
-                    'unit_cost' => $cost,
-                    'subtotal_cost' => $cost,
-                    'markup_percent' => $markup,
-                    'unit_price' => $unitPrice,
-                    'total_price' => $unitPrice,
-                    'order_index' => $idx + 1,
-                ]);
-            }
         }
     }
 

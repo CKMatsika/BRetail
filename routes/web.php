@@ -153,6 +153,10 @@ Route::middleware(['auth', 'tenant', 'module:tenders'])->controller(\App\Http\Co
     Route::patch('/tenders/pricing/items/{itemId}', 'updateItem')->whereNumber('itemId');
     Route::delete('/tenders/pricing/items/{itemId}', 'destroyItem')->whereNumber('itemId');
     Route::patch('/tenders/{tenderId}/pricing/settings', 'updateSettings')->whereNumber('tenderId');
+    Route::get('/tenders/{tenderId}/pricing/items/{itemId}/inventory-sources', 'inventorySources')->whereNumber('tenderId')->whereNumber('itemId');
+    Route::post('/tenders/{tenderId}/pricing/items/{itemId}/web-sources', 'webSources')->whereNumber('tenderId')->whereNumber('itemId');
+    Route::post('/tenders/{tenderId}/pricing/supplier-quotes', 'uploadSupplierQuote')->whereNumber('tenderId');
+    Route::patch('/tenders/{tenderId}/pricing/sources/{sourceId}', 'reviewSource')->whereNumber('tenderId')->whereNumber('sourceId');
     Route::post('/tenders/{tenderId}/pricing/approve', 'approve')->whereNumber('tenderId');
     Route::get('/tenders/{tenderId}/pricing/export-csv', 'exportCsv')->whereNumber('tenderId');
 });
