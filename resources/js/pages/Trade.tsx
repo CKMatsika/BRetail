@@ -87,7 +87,7 @@ export type TradeData = {
     orders: Doc[];
     documents: Doc[];
     variants: {
-        product?: { item_type?: "stock" | "service" };
+        product?: { name?: string; item_type?: "stock" | "service" };
         id: number;
         sku: string;
         name: string;
@@ -784,7 +784,9 @@ export default function Trade({
                                                         )
                                                         .map((v) => (
                                                             <option key={`var_${v.id}`} value={`var_${v.id}`}>
-                                                                {v.name}{v.sku ? ` · SKU: ${v.sku}` : ""}
+                                                                {v.product?.name || v.name}
+                                                                {v.product?.name && v.name !== v.product.name ? ` · ${v.name}` : ""}
+                                                                {v.sku ? ` · SKU: ${v.sku}` : ""}
                                                                 {v.product?.item_type === "service" ? " · Service" : ""}
                                                             </option>
                                                         ))}
