@@ -1059,6 +1059,17 @@ export default function Trade({
                                 >
                                     Print
                                 </a>
+                                <a
+                                    href={
+                                        "/trade/download/" +
+                                        (doc.kind ? "document" : "order") +
+                                        "/" +
+                                        doc.id
+                                    }
+                                    download
+                                >
+                                    Download PDF
+                                </a>
                                 {doc.has_history && (
                                     <button
                                         onClick={() => void showHistory(doc)}

@@ -12,5 +12,6 @@ Route::middleware(['module:accounting', 'module:inventory'])->prefix('trade')->c
     Route::get('/documents/{id}/share-info', 'shareInfo')->whereNumber('id');
     Route::post('/documents/{id}/send-email', 'sendEmail')->whereNumber('id');
     Route::get('/print/{kind}/{id}', 'print')->where('kind', 'order|document');
+    Route::get('/download/{kind}/{id}', 'download')->where('kind', 'order|document');
     Route::post('/{action}/{id?}', 'action')->where('action', 'suppliers|orders|approve|cancel|receipts|bills|direct-bills|customers|credits|quote-preview|quotes|invoices|invoice-preview|invoice-edits|invoice-details|settlements|returns|openings');
 });

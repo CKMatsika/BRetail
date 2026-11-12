@@ -147,6 +147,64 @@ final class TradeController
         ]);
     }
 
+    public function download(Request $r, string $kind, string $id)
+    {
+        $doc = $kind === 'order' ? PurchaseOrder::findOrFail($id) : TradeDocument::findOrFail($id);
+        $purchase = $kind === 'order' || in_array($doc->kind, ['receipt', 'bill', 'supplier_payment', 'opening_payable']);
+        abort_unless($this->allowed($r, $purchase ? 'purchasing' : 'sales'), 403);
+        AccountingAccess::branch($r->user(), Warehouse::findOrFail($doc->warehouse_id)->branch_id);
+
+        $outstanding = '0.00';
+        $isPaid = false;
+        $canPayOnline = false;
+        if ($doc instanceof TradeDocument) {
+            $outstanding = in_array($doc->kind, ['invoice', 'opening_receivable'], true)
+                ? (string) \Brick\Math\BigDecimal::of(app(\App\Services\TradeLedger::class)->outstanding($doc))
+                : (string) \Brick\Math\BigDecimal::of($doc->total);
+            $isPaid = in_array($doc->kind, ['invoice', 'opening_receivable'], true) && \Brick\Math\BigDecimal::of($outstanding)->isLessThanOrEqualTo(0);
+            $canPayOnline = ! $isPaid && in_array($doc->kind, ['invoice', 'quote'], true) && \Brick\Math\BigDecimal::of($outstanding)->isPositive();
+        }
+
+        return $this->pdfResponse($doc, $kind, Company::firstOrFail(), $outstanding, $isPaid, $canPayOnline);
+    }
+
+    public function downloadPublicDocument(Request $r, string $id)
+    {
+        abort_unless($r->hasValidSignature() || auth()->check(), 403, 'This secure link is invalid or has expired.');
+
+        $doc = TradeDocument::withoutGlobalScopes()->findOrFail($id);
+        app(\App\Services\TenantContext::class)->id = $doc->tenant_id;
+        $company = Company::withoutGlobalScopes()->where('tenant_id', $doc->tenant_id)->firstOrFail();
+        $outstanding = in_array($doc->kind, ['invoice', 'opening_receivable'], true)
+            ? (string) \Brick\Math\BigDecimal::of(app(\App\Services\TradeLedger::class)->outstanding($doc))
+            : (string) \Brick\Math\BigDecimal::of($doc->total);
+        $isPaid = in_array($doc->kind, ['invoice', 'opening_receivable'], true) && \Brick\Math\BigDecimal::of($outstanding)->isLessThanOrEqualTo(0);
+        $canPayOnline = ! $isPaid && in_array($doc->kind, ['invoice', 'quote'], true) && \Brick\Math\BigDecimal::of($outstanding)->isPositive();
+
+        return $this->pdfResponse($doc, 'document', $company, $outstanding, $isPaid, $canPayOnline, true);
+    }
+
+    private function pdfResponse(TradeDocument|PurchaseOrder $doc, string $kind, Company $company, string $outstanding, bool $isPaid, bool $canPayOnline, bool $public = false)
+    {
+        $document = $doc instanceof TradeDocument ? app(\App\Services\TradeDocuments::class)->present($doc) : $doc->toArray();
+        $label = $kind === 'order' ? 'Purchase order' : str_replace('_', ' ', $doc->kind);
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('trade.document', [
+            'document' => $document,
+            'company' => $company,
+            'kind' => $label,
+            'outstanding' => $outstanding,
+            'is_paid' => $isPaid,
+            'can_pay_online' => $canPayOnline,
+            'pdf_mode' => true,
+            'is_public' => $public,
+            'download_url' => $public ? URL::temporarySignedRoute('portal.document.download', now()->addDays(60), ['id' => $doc->id]) : null,
+        ])->setPaper('a4');
+
+        $filename = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string) ($document['number'] ?? $doc->id));
+
+        return $pdf->download($filename.'.pdf');
+    }
+
     public function publicDocument(Request $r, string $id)
     {
         if (! $r->hasValidSignatureWhileIgnoring(['payment', 'ref', 'status']) && ! auth()->check()) {
@@ -194,6 +252,7 @@ final class TradeController
             'is_paid' => $isPaid,
             'can_pay_online' => $canPayOnline,
             'payment_notice' => $paymentNotice,
+            'download_url' => URL::temporarySignedRoute('portal.document.download', now()->addDays(60), ['id' => $doc->id]),
         ]);
     }
 

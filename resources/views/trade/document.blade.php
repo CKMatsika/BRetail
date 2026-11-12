@@ -29,7 +29,7 @@
 </style>
 </head>
 <body>
-<div class="toolbar">
+@if(empty($pdf_mode))<div class="toolbar">
     <span>{{ $title }} · {{ $document['number'] }}</span>
     <div style="display:flex;gap:10px;align-items:center;">
         @if($canPayOnline)
@@ -48,10 +48,11 @@
             <span>Share on WhatsApp</span>
         </a>
         <button onclick="window.print()">Print / Save PDF</button>
+        @if(!empty($is_public) && !empty($download_url))<a href="{{ $download_url }}" style="text-decoration:none;border-radius:6px;background:#2563eb;color:white;padding:11px 18px;font:600 14px Arial;">Download PDF</a>@endif
     </div>
-</div>
+</div>@endif
 <main class="sheet">
-@if(!empty($paymentNotice))
+@if(empty($pdf_mode) && !empty($paymentNotice))
     <div style="background:{{ $paymentNotice['type'] === 'success' ? '#ecfdf5' : '#eff6ff' }};border:1px solid {{ $paymentNotice['type'] === 'success' ? '#a7f3d0' : '#bfdbfe' }};color:{{ $paymentNotice['type'] === 'success' ? '#065f46' : '#1e40af' }};padding:14px 18px;border-radius:6px;margin-bottom:24px;font-weight:600;display:flex;align-items:center;gap:10px;">
         <span>{{ $paymentNotice['message'] }}</span>
     </div>
@@ -82,7 +83,7 @@
     @endif
 </div>
 </header>
-@if($canPayOnline)
+@if($canPayOnline && empty($pdf_mode))
 <div style="margin:20px 0;padding:16px 20px;background:#f0fdf4;border:2px solid #008751;border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;break-inside:avoid;">
     <div>
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#166534;">Online Payment Available</div>

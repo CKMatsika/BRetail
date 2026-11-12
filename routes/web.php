@@ -21,6 +21,7 @@ Route::middleware('guest')->group(function () {
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth');
 Route::get('/subscription', [\App\Http\Controllers\SubscriptionStatusController::class, 'show'])->middleware('auth');
 Route::get('/portal/document/{id}', [TradeController::class, 'publicDocument'])->name('portal.document.public');
+Route::get('/portal/document/{id}/download', [TradeController::class, 'downloadPublicDocument'])->name('portal.document.download');
 Route::post('/portal/document/{id}/paynow', [\App\Http\Controllers\PaynowController::class, 'initiate'])->name('portal.paynow.initiate');
 Route::post('/portal/paynow/webhook', [\App\Http\Controllers\PaynowController::class, 'webhook'])->name('portal.paynow.webhook');
 Route::get('/portal/paynow/check/{ref}', [\App\Http\Controllers\PaynowController::class, 'checkStatus'])->name('portal.paynow.check');
