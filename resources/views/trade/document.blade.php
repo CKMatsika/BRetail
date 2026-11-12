@@ -6,7 +6,7 @@
     $showBanking = in_array(strtolower($kind), ['invoice', 'quote', 'quotation'], true) && trim($companyDetails['banking_details'] ?? '') !== '';
     $currency = $company->base_currency;
     $originalCurrency = $document['currency_snapshot']['currency'] ?? $currency;
-    $title = ucwords($kind);
+    $title = strtolower($kind) === 'quote' ? 'Quotation' : ucwords($kind);
     $due = $document['due_on'] ?? $document['expected_on'] ?? null;
     $dueLabel = str_contains(strtolower($kind), 'quote') ? 'Valid until' : (str_contains(strtolower($kind), 'order') ? 'Expected on' : 'Due date');
     $isQuoteOrInvoice = in_array(strtolower($kind), ['invoice', 'quote', 'quotation'], true);
@@ -25,10 +25,11 @@
 *{box-sizing:border-box}body{margin:0;background:#eef2f4;color:#25313b;font:14px/1.55 Arial,Helvetica,sans-serif}.toolbar{max-width:1000px;margin:24px auto 16px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;color:#63717c}.toolbar button{border:0;border-radius:6px;background:#193e35;color:white;padding:11px 20px;font:600 14px Arial;cursor:pointer}.sheet{max-width:1000px;margin:0 auto 40px;background:white;padding:48px 52px;box-shadow:0 4px 24px #20303b0c;border:1px solid #e1e7eb;min-height:850px}.header{display:flex;justify-content:space-between;gap:32px;padding-bottom:30px;border-bottom:3px solid #193e35}.brand{display:flex;align-items:flex-start;gap:20px;flex:1;min-width:0}.brand-logo{flex:0 0 90px}.brand-logo img{max-width:90px!important;max-height:100px!important;margin:0!important}.company-details{min-width:0}.company-contact{font-size:12px;line-height:1.65;color:#55636e;margin-top:8px;overflow-wrap:anywhere}.company-address{white-space:pre-line}.company-identifiers{margin-top:7px;font-size:11px;color:#55636e}.company-identifiers span{display:block}.document-heading{flex:0 0 auto;max-width:35%}.brand h1{font-size:20px;line-height:1.35;margin:0;font-weight:700;color:#193e35}.document-heading{text-align:right}.document-heading h2{font-size:30px;letter-spacing:2px;text-transform:uppercase;margin:0;color:#193e35;line-height:1.2}.number{font-size:15px;margin-top:10px;color:#4e5d68}.currency{font-size:12px;color:#6a7780;margin-top:7px}.details{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin:30px 0 34px}.label{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:1.4px;color:#78858e}.party{font-size:18px;font-weight:600;margin-top:7px}.metadata{margin:0;display:grid;grid-template-columns:auto auto;gap:8px 20px;justify-content:end}.metadata dt{color:#6a7780}.metadata dd{margin:0;text-align:right;font-weight:600}.notice{background:#fff6e4;border-left:3px solid #b77817;padding:12px 16px;margin-top:20px}.items{width:100%;border-collapse:collapse;font-size:13px}.items th{background:#f1f5f4;color:#40594f;font-size:10px;letter-spacing:.6px;text-transform:uppercase;padding:13px 10px;text-align:left;border-bottom:1px solid #dbe5df}.items td{padding:18px 10px;border-bottom:1px solid #e4e9eb;vertical-align:top}.items .numeric{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.description{font-weight:600;min-width:160px}.sku,.basis{display:block;font-size:11px;color:#78858e;font-weight:normal;margin-top:4px}.summary{display:flex;justify-content:flex-end;margin-top:24px}.totals{width:330px;margin:0}.totals div{display:flex;justify-content:space-between;gap:20px;padding:8px 12px}.totals dt{color:#63717c}.totals dd{margin:0;font-variant-numeric:tabular-nums}.totals .grand{background:#193e35;color:white;margin-top:10px;padding:15px 12px;font-size:18px;font-weight:bold}.grand dt{color:white}.conversion{margin-top:18px;text-align:right;color:#6a7780;font-size:12px}.notes{margin-top:40px;border-top:1px solid #e4e9eb;padding-top:20px}.notes p{white-space:pre-line;margin:8px 0 0;color:#55636e}.footer{border-top:1px solid #e4e9eb;margin-top:48px;padding-top:16px;display:flex;justify-content:space-between;gap:20px;font-size:11px;color:#819099}
 @media(max-width:650px){.sheet{padding:25px 18px;margin-bottom:0;min-height:0}.header{gap:20px;flex-wrap:wrap}.brand{flex-basis:100%;gap:14px}.brand-logo{flex-basis:64px}.brand-logo img{max-width:64px!important;max-height:80px!important}.document-heading{max-width:none;text-align:left}.company-contact{font-size:11px}.brand h1{font-size:17px}.document-heading h2{font-size:21px}.number{font-size:12px}.details{grid-template-columns:1fr}.metadata{justify-content:stretch}.items th,.items td{padding:10px 5px}.items{font-size:11px}.description{min-width:0}.items .numeric{white-space:normal}.totals{width:100%}.footer{flex-wrap:wrap}}
 .banking{margin-top:28px;border:1px solid #dfe3e8;border-radius:4px;padding:18px 20px;background:#f8f9fa;break-inside:avoid}.banking p{margin:9px 0 0;white-space:pre-line;font-size:12px;line-height:1.75;color:#40505d;overflow-wrap:anywhere}.banking .label{color:#40505d}
-@page{size:A4;margin:16mm}@media print{body{background:white;font-size:11px}.toolbar{display:none}.sheet{border:0;box-shadow:none;margin:0;padding:0;min-height:0;max-width:none}.header{break-inside:avoid}.items thead{display:table-header-group}.items tr,.summary,.notes,.footer{break-inside:avoid}*{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+@page{size:A4;margin:12mm}@media print{body{background:white;font-size:11px}.toolbar{display:none}.sheet{border:0;box-shadow:none;margin:0;padding:0;min-height:0;max-width:none}.header{break-inside:avoid}.items thead{display:table-header-group}.items tr,.summary,.notes,.footer{break-inside:avoid}*{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+.pdf-mode{background:#fff;color:#24333d;font:10pt/1.45 Arial,Helvetica,sans-serif}.pdf-mode .sheet{width:100%;max-width:none;min-height:0;margin:0;padding:0;border:0;background:#fff;box-shadow:none}.pdf-mode .header{display:block;width:100%;padding:0 0 12px;border-bottom:3px solid #193e35}.pdf-mode .header-table,.pdf-mode .brand-table,.pdf-mode .details-table,.pdf-mode .metadata-table,.pdf-mode .summary-table,.pdf-mode .totals,.pdf-mode .footer-table{width:100%;border-collapse:collapse}.pdf-mode .header-table td,.pdf-mode .brand-table td,.pdf-mode .details-table td,.pdf-mode .metadata-table td,.pdf-mode .summary-table td,.pdf-mode .totals td,.pdf-mode .footer-table td{vertical-align:top}.pdf-mode .header-brand{width:66%}.pdf-mode .header-document{width:34%;text-align:right}.pdf-mode .brand-logo{width:82px;padding-right:14px}.pdf-mode .brand-logo img{display:block;width:auto;max-width:76px!important;max-height:75px!important}.pdf-mode .company-details{min-width:0}.pdf-mode .brand h1{font:700 17pt/1.2 Arial,Helvetica,sans-serif;color:#193e35}.pdf-mode .company-contact{margin-top:5px;font:9pt/1.4 Arial,Helvetica,sans-serif}.pdf-mode .company-identifiers{margin-top:5px;font:8pt/1.4 Arial,Helvetica,sans-serif}.pdf-mode .document-heading{max-width:none}.pdf-mode .document-heading h2{font:700 24pt/1.1 Arial,Helvetica,sans-serif;letter-spacing:1px;color:#193e35}.pdf-mode .number{margin-top:6px;font:700 12pt/1.3 Arial,Helvetica,sans-serif;color:#354954}.pdf-mode .currency{margin-top:3px;font:9pt Arial,Helvetica,sans-serif}.pdf-mode .details{display:block;width:100%;margin:18px 0 18px}.pdf-mode .party-cell{width:55%;padding-right:16px}.pdf-mode .metadata-cell{width:45%}.pdf-mode .label{font:700 8pt Arial,Helvetica,sans-serif;letter-spacing:1px;color:#71808a}.pdf-mode .party{margin-top:4px;font:700 14pt/1.25 Arial,Helvetica,sans-serif;color:#253a45}.pdf-mode .metadata-table{font:9pt/1.35 Arial,Helvetica,sans-serif}.pdf-mode .metadata-table td{padding:2px 0}.pdf-mode .metadata-table .meta-label{color:#71808a;width:42%}.pdf-mode .metadata-table .meta-value{text-align:right;font-weight:700;color:#2c3c46}.pdf-mode .items{table-layout:fixed;font:9pt/1.35 Arial,Helvetica,sans-serif}.pdf-mode .items th{padding:8px 7px;background:#193e35;color:#fff;font:700 8pt Arial,Helvetica,sans-serif;letter-spacing:.4px}.pdf-mode .items td{padding:6px 7px;border-bottom:1px solid #dfe6e9}.pdf-mode .items th:first-child{width:42%}.pdf-mode .items th:nth-child(2){width:8%}.pdf-mode .items th:nth-child(3){width:17%}.pdf-mode .items th:nth-child(4){width:17%}.pdf-mode .items th:nth-child(5){width:16%}.pdf-mode .description{min-width:0;padding-right:12px;font:700 9pt/1.4 Arial,Helvetica,sans-serif;color:#263a45;white-space:normal;word-wrap:break-word;overflow-wrap:break-word}.pdf-mode .sku,.pdf-mode .basis{margin-top:2px;font:8pt/1.3 Arial,Helvetica,sans-serif;color:#71808a}.pdf-mode .summary{display:table;width:100%;margin-top:13px}.pdf-mode .summary-spacer{width:53%}.pdf-mode .totals{width:100%;font:9pt/1.35 Arial,Helvetica,sans-serif}.pdf-mode .totals td{padding:4px 8px}.pdf-mode .totals .total-label{text-align:left;color:#566671}.pdf-mode .totals .total-value{text-align:right;white-space:nowrap;font-weight:600}.pdf-mode .totals .grand td{padding:10px 9px;background:#193e35;color:#fff;font:700 12pt Arial,Helvetica,sans-serif}.pdf-mode .grand .total-label{color:#fff}.pdf-mode .conversion{margin-top:8px;font:8pt Arial,Helvetica,sans-serif}.pdf-mode .notes{margin-top:12px;padding-top:8px;border-top:1px solid #dfe6e9;break-inside:avoid}.pdf-mode .notes p{margin-top:5px;font:9pt/1.45 Arial,Helvetica,sans-serif;color:#42535e}.pdf-mode .banking{margin-top:10px;padding:7px 10px;border:1px solid #dfe6e9;background:#f7f9fa;page-break-inside:avoid;break-inside:avoid}.pdf-mode .banking p{font:8pt/1.35 Arial,Helvetica,sans-serif}.pdf-mode .footer{display:none}.pdf-mode .footer-table td:last-child{text-align:right}.pdf-mode .paynow-panel{display:none!important}.pdf-mode .items tr,.pdf-mode .summary,.pdf-mode .notes,.pdf-mode .footer{break-inside:avoid}
 </style>
 </head>
-<body>
+<body class="{{ !empty($pdf_mode) ? 'pdf-mode' : '' }}">
 @if(empty($pdf_mode))<div class="toolbar">
     <span>{{ $title }} · {{ $document['number'] }}</span>
     <div style="display:flex;gap:10px;align-items:center;">
@@ -58,9 +59,10 @@
     </div>
 @endif
 <header class="header">
-<div class="brand">
-@if($company->document_logo)<div class="brand-logo">@include('partials.company-logo')</div>@endif
-<div class="company-details">
+<table class="header-table"><tr><td class="header-brand">
+<table class="brand-table"><tr>
+@if($company->document_logo)<td class="brand-logo">@include('partials.company-logo')</td>@endif
+<td class="company-details">
 <h1>{{ $company->name }}</h1>
 <div class="company-contact">
 @if(!empty($companyDetails['address']))<div class="company-address">{{ $companyDetails['address'] }}</div>@endif
@@ -72,16 +74,16 @@
 @if(!empty($companyDetails['tax_id']))<span>Tax ID: {{ $companyDetails['tax_id'] }}</span>@endif
 @if(!empty($companyDetails['vat_number']))<span>VAT Number: {{ $companyDetails['vat_number'] }}</span>@endif
 </div>
-</div>
-</div>
-<div class="document-heading">
+</td></tr></table>
+</td><td class="header-document"><div class="document-heading">
     <h2>{{ $title }}</h2>
     <div class="number">{{ $document['number'] }}</div>
     <div class="currency">Currency · {{ $currency }}</div>
     @if($isPaid ?? false)
-        <div style="display:inline-block;border:2px solid #059669;color:#059669;font-weight:800;letter-spacing:1.5px;padding:4px 12px;border-radius:4px;text-transform:uppercase;font-size:12px;margin-top:8px;">✓ PAID IN FULL</div>
+        <div style="display:inline-block;border:2px solid #059669;color:#059669;font-weight:800;letter-spacing:1.5px;padding:4px 12px;border-radius:4px;text-transform:uppercase;font-size:12px;margin-top:8px;">PAID IN FULL</div>
     @endif
 </div>
+</td></tr></table>
 </header>
 @if($canPayOnline && empty($pdf_mode))
 <div style="margin:20px 0;padding:16px 20px;background:#f0fdf4;border:2px solid #008751;border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;break-inside:avoid;">
@@ -101,19 +103,18 @@
 @if($document['superseded'] ?? false)<p class="notice">Previous version · This document has been edited. Use the latest version for current amounts.</p>@endif
 @if(($document['book'] ?? '') !== 'live')<p class="notice">{{ strtoupper($document['book'] ?? 'training') }} · Training document</p>@endif
 <section class="details">
-<div><div class="label">{{ isset($document['supplier_name']) ? 'Supplier' : 'Bill to' }}</div><div class="party">{{ $document['party_name'] ?? $document['supplier_name'] ?? '—' }}</div></div>
-<dl class="metadata"><dt>Issue date</dt><dd>{{ $dateLabel($document['date']) }}</dd>@if($due)<dt>{{ $dueLabel }}</dt><dd>{{ $dateLabel($due) }}</dd>@endif @if(!empty($document['reference']))<dt>Reference</dt><dd>{{ $document['reference'] }}</dd>@endif</dl>
+<table class="details-table"><tr><td class="party-cell"><div class="label">{{ isset($document['supplier_name']) ? 'Supplier' : 'Bill to' }}</div><div class="party">{{ $document['party_name'] ?? $document['supplier_name'] ?? '—' }}</div></td><td class="metadata-cell"><table class="metadata-table"><tr><td class="meta-label">Issue date</td><td class="meta-value">{{ $dateLabel($document['date']) }}</td></tr>@if($due)<tr><td class="meta-label">{{ $dueLabel }}</td><td class="meta-value">{{ $dateLabel($due) }}</td></tr>@endif @if(!empty($document['reference']))<tr><td class="meta-label">Reference</td><td class="meta-value">{{ $document['reference'] }}</td></tr>@endif</table></td></tr></table>
 </section>
 <table class="items"><thead><tr><th>Description</th><th class="numeric">Qty</th><th class="numeric">Unit price @if($originalCurrency !== $currency)<br>({{ $originalCurrency }})@endif</th><th class="numeric">Net ({{ $currency }})</th><th class="numeric">VAT ({{ $currency }})</th></tr></thead><tbody>
 @foreach($document['items'] as $item)
 <tr><td class="description">{{ $item['description'] ?? $item['sku'] ?? 'Item' }}@if(!empty($item['sku']))<span class="sku">{{ $item['sku'] }}</span>@endif</td><td class="numeric">{{ $quantity($item['quantity'] ?? 0) }}</td><td class="numeric">{{ $money($item['original']['unit_price'] ?? $item['original_unit_cost'] ?? $item['unit_price'] ?? $item['unit_cost'] ?? 0) }}@if(isset($item['unit_price']))<span class="basis">{{ !empty($item['prices_include_vat']) ? 'VAT included' : 'VAT excluded' }}</span>@endif</td><td class="numeric">{{ $money($item['net'] ?? $item['value'] ?? 0) }}</td><td class="numeric">{{ $money($item['tax'] ?? 0) }}</td></tr>
 @endforeach
 </tbody></table>
-<div class="summary"><dl class="totals">@if(isset($document['net']))<div><dt>Subtotal (excl. VAT)</dt><dd>{{ $money($document['net']) }}</dd></div><div><dt>VAT</dt><dd>{{ $money($document['tax']) }}</dd></div>@endif @if(isset($document['total']))<div class="grand"><dt>Total {{ $currency }}</dt><dd>{{ $money($document['total']) }}</dd></div>@endif</dl></div>
+<table class="summary"><tr><td class="summary-spacer"></td><td><table class="totals">@if(isset($document['net']))<tr><td class="total-label">Subtotal (excl. VAT)</td><td class="total-value">{{ $money($document['net']) }}</td></tr><tr><td class="total-label">VAT</td><td class="total-value">{{ $money($document['tax']) }}</td></tr>@endif @if(isset($document['total']))<tr class="grand"><td class="total-label">Total {{ $currency }}</td><td class="total-value">{{ $money($document['total']) }}</td></tr>@endif</table></td></tr></table>
 @if(!empty($document['currency_snapshot']))<div class="conversion">Original total: {{ $originalCurrency }} {{ $money($document['currency_snapshot']['original_amount']) }}<br>Exchange rate: {{ $document['currency_snapshot']['exchange_rate'] }} {{ $currency }} per {{ $originalCurrency }}</div>@endif
 @if(!empty($document['notes']))<section class="notes"><div class="label">Notes</div><p>{{ $document['notes'] }}</p></section>@endif
-@if($canPayOnline)
-<section id="paynow" style="margin-top:28px;border:2px solid #008751;border-radius:8px;padding:20px 24px;background:#f0fdf4;break-inside:avoid;">
+@if($canPayOnline && empty($pdf_mode))
+<section id="paynow" class="paynow-panel" style="margin-top:28px;border:2px solid #008751;border-radius:8px;padding:20px 24px;background:#f0fdf4;break-inside:avoid;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
         <div>
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#166534;">Instant Online Payment</div>
@@ -133,7 +134,7 @@
 @if($showBanking)
 <section class="banking" aria-label="Banking details"><div class="label">Banking details</div><p>{{ $companyDetails['banking_details'] }}</p></section>
 @endif
-<footer class="footer"><span>{{ $company->name }}</span><span>{{ $document['number'] }} · {{ $currency }}</span></footer>
+<footer class="footer"><table class="footer-table"><tr><td>{{ $company->name }}</td><td>{{ $document['number'] }} · {{ $currency }}</td></tr></table></footer>
 </main>
 </body>
 </html>
