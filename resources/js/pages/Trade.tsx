@@ -341,7 +341,12 @@ function DocumentPreview({
                             return (
                                 <tr key={n}>
                                     <td>
-                                        {i.sku} {i.description}
+                                        {i.description || i.sku}
+                                        {i.sku && i.description && i.sku !== i.description && (
+                                            <small style={{ display: "block", color: "#64748b" }}>
+                                                SKU: {i.sku}
+                                            </small>
+                                        )}
                                     </td>
                                     <td>{i.quantity}</td>
                                     <td>{i.unit_price}</td>
@@ -712,7 +717,14 @@ export default function Trade({
                             <tr key={n}>
                                 <td>
                                     {kind === "quantity" ? (
-                                        i.sku + " " + i.description
+                                        <>
+                                            {i.description || i.sku}
+                                            {i.sku && i.description && i.sku !== i.description && (
+                                                <small style={{ display: "block", color: "#64748b" }}>
+                                                    SKU: {i.sku}
+                                                </small>
+                                            )}
+                                        </>
                                     ) : (
                                         <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                                             <select
@@ -772,7 +784,7 @@ export default function Trade({
                                                         )
                                                         .map((v) => (
                                                             <option key={`var_${v.id}`} value={`var_${v.id}`}>
-                                                                {v.sku} {v.name}
+                                                                {v.name}{v.sku ? ` · SKU: ${v.sku}` : ""}
                                                                 {v.product?.item_type === "service" ? " · Service" : ""}
                                                             </option>
                                                         ))}
